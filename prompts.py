@@ -320,7 +320,8 @@ ENCABEZADO FIJO, antes del apartado 0, en todos los informes:
    1.8 Score global ponderado (%) y semáforo, con la nota de que mide el cumplimiento dentro de su tramo.
    1.9 Vetos disparados (Sí/No) y cuáles.
 2. Cláusulas de veto. Estado de las 13, con las rechazadas o ausentes destacadas al inicio.
-3. Análisis cláusula por cláusula, en el orden del manual. Por cada una: 3.x.1 cláusula y sección · 3.x.2 cita literal con localizador, o AUSENTE · 3.x.3 posición detectada · 3.x.4 nivel de cumplimiento · 3.x.5 peso y de qué riesgo del manual sale · 3.x.6 puntuación y ponderada · 3.x.7 veto y su estado · 3.x.8 redline.
+3. Análisis de las cláusulas con desviación (estados RECHAZADA, AUSENTE y DESVIACION_ACEPTABLE), en el orden del manual. Por cada una: 3.x.1 cláusula y sección · 3.x.2 cita literal con localizador, o AUSENTE · 3.x.3 posición detectada · 3.x.4 nivel de cumplimiento · 3.x.5 peso y de qué riesgo del manual sale · 3.x.6 puntuación y ponderada · 3.x.7 veto y su estado · 3.x.8 redline.
+   Al final del apartado 3, las cláusulas CONFORMES se listan en UNA SOLA LÍNEA cada una — sección · nombre · localizador de la cita · peso — sin desarrollar los sub-apartados: el detalle completo de una cláusula conforme no aporta a la negociación.
 4. Cláusulas ausentes, con el texto propuesto a insertar.
 5. Cláusulas no exigidas en este tramo. Lista con su riesgo y una línea sobre qué protegerían, para que el abogado pueda decidir si alguna merece exigirse pese al tramo.
 6. Cálculo del score: Σ(peso × puntuación), Σ(pesos), nº de cláusulas del denominador, resultado.
