@@ -6,6 +6,7 @@ Privacidad (briefing §8): nada se persiste; los documentos se procesan en
 memoria, se envían únicamente a la API de Anthropic y se descartan.
 """
 
+import traceback
 from pathlib import Path
 
 import streamlit as st
@@ -18,6 +19,14 @@ from pipeline import ErrorTriaje, ErrorTruncamiento, ejecutar_analisis
 MAX_FICHEROS = 5
 MAX_MB_TOTAL = 20
 MAX_ANALISIS_POR_SESION = 5
+
+# Modo depuración: se activa poniendo MODO_DEPURACION = "true" en los Secrets
+# de la app de Streamlit Cloud (pensado para la app desplegada desde la rama
+# `depuracion`). Muestra el detalle técnico de los errores. En la app pública
+# no debe activarse.
+MODO_DEPURACION = str(st.secrets.get("MODO_DEPURACION", "")).lower() in (
+    "true", "1", "si", "sí",
+)
 
 TEXTO_CASILLA = (
     "Confirmo que este documento no está sujeto a un acuerdo de confidencialidad "
@@ -88,7 +97,7 @@ y el
 &nbsp;
 
 Los datos introducidos en esta herramienta no serán utilizados para entrenar
-modelos de inteligencia artificial. Generalmente, todos los datos de entrada y de salida
+modelos de inteligencia artificial. Todos los datos de entrada y de salida
 serán eliminados por Anthropic de sus servidores a los 30 días, si bien se
 recomienda no introducir información confidencial o datos de carácter
 personal.
@@ -243,6 +252,11 @@ def pantalla_subida():
         return
 
     # --- Pantalla 2: progreso por fases, no una barra genérica --------------
+    # Los mensajes de error se guardan y se pintan FUERA del bloque de estado,
+    # para que queden siempre visibles aunque la caja de progreso se pliegue.
+    mensaje_error = None
+    detalle_tecnico = None
+
     with st.status("Preparando el análisis…", expanded=True) as estado:
 
         def progreso(etapa, actual, total):
@@ -263,39 +277,46 @@ def pantalla_subida():
             st.session_state.resultado = resultado
             st.session_state.analisis_realizados += 1
             estado.update(label="Análisis completado", state="complete")
-            st.rerun()
 
         except ErrorTriaje as e:
             estado.update(label="Análisis detenido", state="error")
+            detalle_tecnico = (
+                f"ErrorTriaje · codigo={e.codigo!r} · detalle={e.detalle!r} · "
+                f"tipo_detectado={e.tipo_detectado!r}\n\n" + traceback.format_exc()
+            )
             if e.codigo == "fuera_de_ambito":
                 tipo = e.tipo_detectado or "otro tipo"
-                st.error(
+                mensaje_error = (
                     f"Este documento parece un contrato de {tipo}, y esta "
                     "herramienta solo analiza contratos SaaS."
                 )
             else:
-                st.error(
-                    MENSAJES_ERROR.get(
-                        e.codigo, MENSAJES_ERROR["version_manual_no_coincide"]
-                    )
+                mensaje_error = MENSAJES_ERROR.get(
+                    e.codigo, MENSAJES_ERROR["version_manual_no_coincide"]
                 )
         except ErrorTruncamiento:
             estado.update(label="Análisis detenido", state="error")
-            st.error(
+            detalle_tecnico = traceback.format_exc()
+            mensaje_error = (
                 "El informe generado excede el tamaño máximo y ha llegado "
                 "incompleto. No lo mostramos para evitar conclusiones parciales. "
                 "Inténtalo de nuevo o divide el contrato en menos anexos."
             )
-        except ValueError:
-            estado.update(label="Análisis detenido", state="error")
-            st.error(
-                "No hemos podido leer alguno de los ficheros. Comprueba que el "
-                "formato es PDF, DOCX, TXT o MD."
-            )
         except Exception:
-            # Errores de red o de API: el SDK ya reintentó con backoff.
+            # Cualquier otro fallo: extracción de ficheros, red o API (el SDK
+            # ya reintentó con backoff). El detalle real queda en el modo
+            # depuración; al usuario final no se le enseña la tripa técnica.
             estado.update(label="Análisis detenido", state="error")
-            st.error("No hemos podido completar el análisis. Inténtalo más tarde.")
+            detalle_tecnico = traceback.format_exc()
+            mensaje_error = "No hemos podido completar el análisis. Inténtalo más tarde."
+
+    if mensaje_error:
+        st.error(mensaje_error)
+        if MODO_DEPURACION and detalle_tecnico:
+            with st.expander("🔧 Detalle técnico (modo depuración)", expanded=True):
+                st.code(detalle_tecnico)
+    elif st.session_state.resultado is not None:
+        st.rerun()
 
 
 # ---------------------------------------------------------------------------
