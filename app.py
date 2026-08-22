@@ -134,34 +134,52 @@ def _cargar_manual() -> str:
 # ---------------------------------------------------------------------------
 def pantalla_informe():
     resultado = st.session_state.resultado
-    verificacion = resultado["verificacion"]
+    agregado = resultado["agregado"]
+
+    # El score, el semáforo y los vetos los calcula ÚNICAMENTE la aplicación
+    # (nunca el modelo): una sola fuente de verdad, mostrada aquí de forma
+    # nativa para que no dependa de cómo lo transcriba el HTML del informe.
+    col1, col2, col3 = st.columns(3)
+    col1.metric(
+        "Score (calculado por la aplicación)",
+        f"{agregado['score_pct']} %" if agregado["score_pct"] is not None else "N/D",
+    )
+    col2.metric("Semáforo", agregado["semaforo"])
+    col3.metric("Vetos disparados", "Sí" if agregado["hay_veto_disparado"] else "No")
+    st.caption(
+        f"Σ peso×puntuación = {agregado['suma_ponderada']} · "
+        f"Σ pesos = {agregado['suma_pesos']} · "
+        f"{agregado['n_denominador']} cláusulas en el denominador."
+    )
 
     # Elementos que la app añade ENCIMA del HTML (briefing §7): el HTML del
     # informe no se toca ni se reestiliza.
-    if verificacion["manipulacion"]:
+    if agregado["intentos_manipulacion"]:
+        texto = "\n\n".join(
+            f"- **{m['origen']}** (localizador: {m['localizador'] or 'no indicado'})"
+            f"\n  > {m['texto_detectado'] or '(sin texto registrado)'}"
+            for m in agregado["intentos_manipulacion"]
+        )
         st.error(
-            "🚨 **Posible intento de manipulación detectado en el documento.** "
+            "🚨 **Intento de manipulación detectado en el documento.** "
             "El documento contiene texto que parece dirigido al sistema de "
             "análisis (instrucciones de puntuación u órdenes de ignorar reglas). "
-            "El análisis lo ha ignorado, pero revísalo con especial atención:\n\n- "
-            + "\n- ".join(verificacion["manipulacion"])
+            "El análisis lo ha ignorado, pero revísalo con especial atención en "
+            "el punto exacto indicado:\n\n" + texto
         )
 
-    if verificacion["vetos_disparados"]:
+    if agregado["hay_veto_disparado"]:
         st.error(
-            "⛔ **Vetos disparados** (verificado de forma independiente por la "
-            "aplicación): " + " · ".join(verificacion["vetos_disparados"])
+            "⛔ **Vetos disparados** (calculado por la aplicación): "
+            + " · ".join(agregado["vetos_disparados"])
         )
 
-    if verificacion["discrepancia_score"]:
+    if resultado["aviso_transcripcion"]:
         st.warning(
-            "⚠️ **Aviso de verificación:** el score que muestra el informe no "
-            "coincide con el recálculo independiente realizado por la aplicación "
-            f"(**{verificacion['score_recalculado']} %**, con "
-            f"Σ peso×puntuación = {verificacion['suma_ponderada']}, "
-            f"Σ pesos = {verificacion['suma_pesos']} sobre "
-            f"{verificacion['n_denominador']} cláusulas). "
-            "Toma como referencia el valor recalculado."
+            "⚠️ El texto del informe no reproduce con exactitud el score "
+            f"calculado arriba (**{agregado['score_pct']} %**). Toma como "
+            "referencia siempre la cifra mostrada en esta pantalla, no la del "
+            "documento."
         )
 
     if resultado["incidencias_pipeline"]:
@@ -170,18 +188,6 @@ def pantalla_informe():
             "sus cláusulas no están incluidas en el análisis: "
             + " · ".join(resultado["incidencias_pipeline"])
         )
-
-    st.download_button(
-        "⬇️ Descargar informe (HTML)",
-        data=resultado["html"],
-        file_name="informe_revision_saas.html",
-        mime="text/html",
-    )
-    st.caption(
-        "El informe descargado es un documento autónomo: puedes abrirlo en una "
-        "pestaña nueva del navegador o compartirlo; los avisos legales viajan "
-        "dentro del propio documento."
-    )
 
     components.html(resultado["html"], height=900, scrolling=True)
 
