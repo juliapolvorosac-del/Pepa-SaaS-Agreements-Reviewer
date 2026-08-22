@@ -88,7 +88,7 @@ y el
 &nbsp;
 
 Los datos introducidos en esta herramienta no serán utilizados para entrenar
-modelos de inteligencia artificial. Todos los datos de entrada y de salida
+modelos de inteligencia artificial. Generalmente, todos los datos de entrada y de salida
 serán eliminados por Anthropic de sus servidores a los 30 días, si bien se
 recomienda no introducir información confidencial o datos de carácter
 personal.
