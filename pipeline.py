@@ -189,12 +189,12 @@ def _precalentar_cache(cliente, manual: str, contrato: str) -> None:
         pass
 
 
-def _revisar_modulo(cliente, id_modulo: str, manual: str, contrato: str, json_fase_0: str):
+def _revisar_modulo(cliente, id_modulo: str, manual: str, contrato: str, json_fase_0: str, reintento: bool = False):
     """Una llamada de fase 1. El prompt del módulo va DESPUÉS de los bloques
     cacheados para no romper el prefijo compartido del caché (el prompt cambia
     por módulo; el manual y el contrato no)."""
     contenido = _bloques_cacheados(manual, contrato) + [
-        {"type": "text", "text": construir_prompt_fase_1(id_modulo, json_fase_0)}
+        {"type": "text", "text": construir_prompt_fase_1(id_modulo, json_fase_0, reintento=reintento)}
     ]
     mensaje = _llamada(
         cliente,
@@ -215,16 +215,19 @@ def _revisar_modulo(cliente, id_modulo: str, manual: str, contrato: str, json_fa
     return resultado
 
 
-def fase_1(cliente, fase0: dict, manual: str, contrato: str, progreso=None):
+def fase_1(cliente, fase0: dict, manual: str, contrato: str, progreso=None, cache_precalentada=False):
     """Lanza los módulos en paralelo. Si un módulo falla (recuento, JSON o
-    truncamiento), se reintenta UNA vez; si vuelve a fallar, se continúa y se
-    registra como incidencia para la fase 2 (briefing §2)."""
+    truncamiento), se reintenta UNA vez con una nota correctiva —sin ella, un
+    reintento con la misma entrada exacta puede reproducir el mismo fallo
+    determinista—; si vuelve a fallar, se continúa y se registra como
+    incidencia para la fase 2 (briefing §2)."""
     modulos = ["M1", "M2", "M3", "M4", "M5", "M6"]
     if fase0.get("modulo_aplicable") == "EEUU":
         modulos.append("M7")
 
     json_fase_0 = json.dumps(fase0, ensure_ascii=False, indent=2)
-    _precalentar_cache(cliente, manual, contrato)
+    if not cache_precalentada:
+        _precalentar_cache(cliente, manual, contrato)
 
     resultados = {}
     incidencias = []
@@ -236,7 +239,10 @@ def fase_1(cliente, fase0: dict, manual: str, contrato: str, progreso=None):
             raise
         except Exception as primera:
             try:
-                return id_modulo, _revisar_modulo(cliente, id_modulo, manual, contrato, json_fase_0), None
+                resultado = _revisar_modulo(
+                    cliente, id_modulo, manual, contrato, json_fase_0, reintento=True
+                )
+                return id_modulo, resultado, None
             except ErrorTriaje:
                 raise
             except Exception as segunda:
@@ -262,11 +268,14 @@ def fase_1(cliente, fase0: dict, manual: str, contrato: str, progreso=None):
 # FASE 2 · Consolidación e informe
 # ---------------------------------------------------------------------------
 
-def fase_2(cliente, fase0: dict, resultados: dict, incidencias_pipeline: list) -> str:
+def fase_2(cliente, fase0: dict, resultados: dict, incidencias_pipeline: list, agregado: dict) -> str:
     """Consolidación. NO se envían ni el contrato ni el manual (briefing §2)."""
     partes = [
         "## JSON DE LA FASE 0 (TRIAJE)\n\n"
-        + json.dumps(fase0, ensure_ascii=False, indent=2)
+        + json.dumps(fase0, ensure_ascii=False, indent=2),
+        "## RESULTADO AGREGADO (calculado y verificado por la aplicación — "
+        "úsalo tal cual, no lo recalcules)\n\n"
+        + json.dumps(agregado, ensure_ascii=False, indent=2),
     ]
     for id_modulo in ["M1", "M2", "M3", "M4", "M5", "M6", "M7"]:
         if id_modulo in resultados:
@@ -301,7 +310,13 @@ def fase_2(cliente, fase0: dict, resultados: dict, incidencias_pipeline: list) -
 
 
 # ---------------------------------------------------------------------------
-# Verificaciones independientes en código (briefing §6)
+# Cálculo del score y de los vetos: LO HACE ÚNICAMENTE LA APLICACIÓN.
+#
+# El modelo de la fase 2 ya no calcula el score ni decide si algún veto se ha
+# disparado: recibe estos valores hechos en el bloque RESULTADO AGREGADO y
+# solo los transcribe. Una sola fuente de verdad — sin ella, dos cálculos
+# independientes del mismo dato pueden divergir de forma silenciosa y
+# plausible, que es justo el fallo que esto sustituye.
 # ---------------------------------------------------------------------------
 
 def _es_desplazada(id_modulo: str, indice: int, es_eeuu: bool, resultados: dict) -> bool:
@@ -312,15 +327,26 @@ def _es_desplazada(id_modulo: str, indice: int, es_eeuu: bool, resultados: dict)
     return "M7" in resultados
 
 
-def verificar(fase0: dict, resultados: dict, html: str) -> dict:
-    """Recalcula el score con la misma fórmula que la fase 2 y comprueba vetos
-    y señales de manipulación. Un fallo aritmético del modelo es silencioso y
-    plausible: nadie lo detecta leyendo."""
+def calcular_agregado(fase0: dict, resultados: dict) -> dict:
+    """Score, semáforo, vetos, cláusulas desplazadas e intentos de
+    manipulación — todo calculado en código a partir de los JSON de fase 0 y
+    fase 1, ANTES de pedir el informe. Se llama con este resultado como dato
+    de entrada de la fase 2 (briefing §6)."""
     es_eeuu = fase0.get("modulo_aplicable") == "EEUU"
     suma_ponderada = 0.0
     suma_pesos = 0.0
     n_denominador = 0
     vetos_disparados = []
+    clausulas_desplazadas = []
+    intentos_manipulacion = []
+
+    im0 = fase0.get("intento_manipulacion") or {}
+    if isinstance(im0, dict) and im0.get("detectado"):
+        intentos_manipulacion.append({
+            "origen": "Fase 0 · Triaje",
+            "texto_detectado": im0.get("texto_detectado", ""),
+            "localizador": im0.get("localizador", ""),
+        })
 
     for id_modulo, clausulas in resultados.items():
         for indice, c in enumerate(clausulas):
@@ -328,10 +354,24 @@ def verificar(fase0: dict, resultados: dict, html: str) -> dict:
                 continue
             estado = c.get("estado", "")
             desplazada = _es_desplazada(id_modulo, indice, es_eeuu, resultados)
+            if desplazada:
+                clausulas_desplazadas.append({
+                    "modulo": id_modulo,
+                    "seccion_manual": c.get("seccion_manual", ""),
+                    "nombre_clausula": c.get("nombre_clausula", ""),
+                    "desplazada_por": DESPLAZADAS_EEUU.get((id_modulo, indice), ""),
+                })
             if c.get("es_veto") and c.get("veto_disparado") and not desplazada:
                 vetos_disparados.append(
                     f"{c.get('seccion_manual', '')} {c.get('nombre_clausula', '')}".strip()
                 )
+            im = c.get("intento_manipulacion") or {}
+            if isinstance(im, dict) and im.get("detectado"):
+                intentos_manipulacion.append({
+                    "origen": f"Fase 1 · Módulo {id_modulo} · {c.get('nombre_clausula', '')}",
+                    "texto_detectado": im.get("texto_detectado", ""),
+                    "localizador": im.get("localizador", ""),
+                })
             if estado in ("NO_APLICA", "NO_EXIGIBLE") or desplazada:
                 continue
             try:
@@ -344,39 +384,41 @@ def verificar(fase0: dict, resultados: dict, html: str) -> dict:
             n_denominador += 1
 
     score = round(100 * suma_ponderada / suma_pesos, 1) if suma_pesos else None
-
-    # Discrepancia con el score del informe: si ningún porcentaje del HTML está
-    # a menos de 1 punto del recalculado, el modelo se equivocó en la aritmética.
-    discrepancia = False
-    if score is not None and html:
-        porcentajes = [
-            float(p.replace(",", "."))
-            for p in re.findall(r"(\d{1,3}(?:[.,]\d+)?)\s*%", html)
-        ]
-        if porcentajes and not any(abs(p - score) <= 1.0 for p in porcentajes):
-            discrepancia = True
-
-    # Intentos de manipulación detectados por fase 0 o fase 1
-    manipulacion = [
-        str(alerta)
-        for alerta in fase0.get("alertas_triaje", []) or []
-        if "manipul" in str(alerta).lower()
-    ]
-    for clausulas in resultados.values():
-        for c in clausulas:
-            if isinstance(c, dict) and c.get("contradice_fase_0"):
-                if "manipul" in str(c["contradice_fase_0"]).lower():
-                    manipulacion.append(str(c["contradice_fase_0"]))
+    hay_veto = bool(vetos_disparados)
+    if hay_veto or score is None:
+        semaforo = "🔴"
+    elif score >= 85:
+        semaforo = "🟢"
+    elif score >= 60:
+        semaforo = "🟡"
+    else:
+        semaforo = "🔴"
 
     return {
-        "score_recalculado": score,
+        "score_pct": score,
         "suma_ponderada": round(suma_ponderada, 2),
         "suma_pesos": round(suma_pesos, 2),
         "n_denominador": n_denominador,
-        "discrepancia_score": discrepancia,
+        "semaforo": semaforo,
+        "hay_veto_disparado": hay_veto,
         "vetos_disparados": vetos_disparados,
-        "manipulacion": manipulacion,
+        "clausulas_desplazadas": clausulas_desplazadas,
+        "intentos_manipulacion": intentos_manipulacion,
     }
+
+
+def verificar_transcripcion(agregado: dict, html: str) -> bool:
+    """Comprobación de seguridad, no de cálculo: ¿el informe transcribió la
+    cifra de score que se le dio? Si no aparece, es un error de transcripción
+    del modelo (raro, pero posible), no una discrepancia de cálculo."""
+    score = agregado.get("score_pct")
+    if score is None or not html:
+        return False
+    porcentajes = [
+        float(p.replace(",", "."))
+        for p in re.findall(r"(\d{1,3}(?:[.,]\d+)?)\s*%", html)
+    ]
+    return bool(porcentajes) and not any(abs(p - score) <= 0.15 for p in porcentajes)
 
 
 # ---------------------------------------------------------------------------
@@ -393,25 +435,36 @@ def ejecutar_analisis(contrato: str, manual: str, api_key: str, progreso=None) -
 
     if progreso:
         progreso("triaje", 0, 0)
-    fase0 = fase_0(cliente, contrato)
+    # El precalentamiento de caché no depende del triaje (solo necesita el
+    # manual y el contrato), así que se lanza en paralelo con la fase 0 en vez
+    # de esperar a que termine: se ahorra ese tiempo por completo.
+    with ThreadPoolExecutor(max_workers=1) as pre_pool:
+        futuro_cache = pre_pool.submit(_precalentar_cache, cliente, manual, contrato)
+        fase0 = fase_0(cliente, contrato)
+        futuro_cache.result()
 
     def progreso_modulos(actual, total):
         if progreso:
             progreso("modulos", actual, total)
 
-    resultados, incidencias, _ = fase_1(cliente, fase0, manual, contrato, progreso_modulos)
+    resultados, incidencias, _ = fase_1(
+        cliente, fase0, manual, contrato, progreso_modulos, cache_precalentada=True
+    )
 
     if not resultados:
         raise ErrorTriaje(codigo="version_manual_no_coincide", detalle="ningún módulo devolvió resultados")
 
+    agregado = calcular_agregado(fase0, resultados)
+
     if progreso:
         progreso("informe", 0, 0)
-    html = fase_2(cliente, fase0, resultados, incidencias)
+    html = fase_2(cliente, fase0, resultados, incidencias, agregado)
 
     return {
         "fase0": fase0,
         "resultados": resultados,
         "incidencias_pipeline": incidencias,
         "html": html,
-        "verificacion": verificar(fase0, resultados, html),
+        "agregado": agregado,
+        "aviso_transcripcion": verificar_transcripcion(agregado, html),
     }
