@@ -26,7 +26,7 @@ from prompts import (
 )
 
 MODELO = "claude-opus-5"
-MAX_TOKENS_FASE_0 = 8000
+MAX_TOKENS_FASE_0 = 16000
 MAX_TOKENS_FASE_1 = 32000
 MAX_TOKENS_FASE_2 = 64000
 
@@ -110,6 +110,8 @@ def fase_0(cliente, contrato: str) -> dict:
         contenido_usuario=contrato,
         max_tokens=MAX_TOKENS_FASE_0,
     )
+    if mensaje.stop_reason == "max_tokens":
+        raise ValueError("fase 0: respuesta truncada por max_tokens")
     resultado = _extraer_json(_texto_respuesta(mensaje))
     if isinstance(resultado, dict) and "error" in resultado:
         raise ErrorTriaje(
