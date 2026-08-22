@@ -25,10 +25,26 @@ from prompts import (
     construir_prompt_fase_1,
 )
 
-MODELO = "claude-opus-5"
+# Modelo por fase. La fase 1 —el análisis jurídico contra el manual— se queda
+# en Opus 5. El triaje (extracción de hechos) y la consolidación (que tiene
+# prohibido reinterpretar) usan Sonnet 5: ~2,5 veces más barato y más rápido.
+MODELO_FASE_0 = "claude-sonnet-5"
+MODELO_FASE_1 = "claude-opus-5"
+MODELO_FASE_2 = "claude-sonnet-5"
 MAX_TOKENS_FASE_0 = 16000
 MAX_TOKENS_FASE_1 = 32000
-MAX_TOKENS_FASE_2 = 64000
+# El informe de la fase 2 (67 cláusulas × 8 sub-apartados + redlines) puede ser
+# enorme: se usa el máximo de salida que admite el modelo (128K, en streaming).
+MAX_TOKENS_FASE_2 = 128000
+
+# Esfuerzo de razonamiento por fase (parámetro `effort` de la API). El
+# razonamiento interno son tokens de salida: se pagan y se esperan. Se reduce
+# solo donde no hay juicio jurídico: el triaje extrae hechos y la fase 2 tiene
+# prohibido reinterpretar clasificaciones. La fase 1 —el análisis contra el
+# manual— se mantiene en "high".
+ESFUERZO_FASE_0 = "medium"
+ESFUERZO_FASE_1 = "high"
+ESFUERZO_FASE_2 = "medium"
 
 # Mapa de desplazamiento del paso A de la fase 2, replicado en código para el
 # recálculo independiente del score. Clave: (módulo, índice de cláusula en la
@@ -86,15 +102,17 @@ def _extraer_json(texto: str):
     return json.loads(texto[inicio:fin])
 
 
-def _llamada(cliente, *, system=None, contenido_usuario, max_tokens):
+def _llamada(cliente, *, modelo, system=None, contenido_usuario, max_tokens, esfuerzo=None):
     """Llamada en streaming; devuelve el mensaje final completo."""
     kwargs = {
-        "model": MODELO,
+        "model": modelo,
         "max_tokens": max_tokens,
         "messages": [{"role": "user", "content": contenido_usuario}],
     }
     if system is not None:
         kwargs["system"] = system
+    if esfuerzo is not None:
+        kwargs["output_config"] = {"effort": esfuerzo}
     with cliente.messages.stream(**kwargs) as stream:
         return stream.get_final_message()
 
@@ -106,9 +124,11 @@ def _llamada(cliente, *, system=None, contenido_usuario, max_tokens):
 def fase_0(cliente, contrato: str) -> dict:
     mensaje = _llamada(
         cliente,
+        modelo=MODELO_FASE_0,
         system=PROMPT_FASE_0,
         contenido_usuario=contrato,
         max_tokens=MAX_TOKENS_FASE_0,
+        esfuerzo=ESFUERZO_FASE_0,
     )
     if mensaje.stop_reason == "max_tokens":
         raise ValueError("fase 0: respuesta truncada por max_tokens")
@@ -148,16 +168,18 @@ def _precalentar_cache(cliente, manual: str, contrato: str) -> None:
     """Escribe el prefijo manual+contrato en el caché con una llamada mínima,
     para que las llamadas paralelas de la fase 1 lo lean en vez de escribirlo
     cada una por su cuenta. Si falla, se continúa sin caché: solo afecta al coste."""
+    # El caché es por modelo: el precalentamiento debe usar el MISMO modelo que
+    # las llamadas de la fase 1.
     try:
         cliente.messages.create(
-            model=MODELO,
+            model=MODELO_FASE_1,
             max_tokens=0,
             messages=[{"role": "user", "content": _bloques_cacheados(manual, contrato)}],
         )
     except anthropic.BadRequestError:
         try:
             cliente.messages.create(
-                model=MODELO,
+                model=MODELO_FASE_1,
                 max_tokens=1,
                 messages=[{"role": "user", "content": _bloques_cacheados(manual, contrato)}],
             )
@@ -174,7 +196,13 @@ def _revisar_modulo(cliente, id_modulo: str, manual: str, contrato: str, json_fa
     contenido = _bloques_cacheados(manual, contrato) + [
         {"type": "text", "text": construir_prompt_fase_1(id_modulo, json_fase_0)}
     ]
-    mensaje = _llamada(cliente, contenido_usuario=contenido, max_tokens=MAX_TOKENS_FASE_1)
+    mensaje = _llamada(
+        cliente,
+        modelo=MODELO_FASE_1,
+        contenido_usuario=contenido,
+        max_tokens=MAX_TOKENS_FASE_1,
+        esfuerzo=ESFUERZO_FASE_1,
+    )
     if mensaje.stop_reason == "max_tokens":
         raise ValueError("respuesta truncada")
     resultado = _extraer_json(_texto_respuesta(mensaje))
@@ -257,9 +285,11 @@ def fase_2(cliente, fase0: dict, resultados: dict, incidencias_pipeline: list) -
 
     mensaje = _llamada(
         cliente,
+        modelo=MODELO_FASE_2,
         system=PROMPT_FASE_2,
         contenido_usuario="\n\n---\n\n".join(partes),
         max_tokens=MAX_TOKENS_FASE_2,
+        esfuerzo=ESFUERZO_FASE_2,
     )
     if mensaje.stop_reason == "max_tokens":
         raise ErrorTruncamiento()
