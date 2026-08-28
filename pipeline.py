@@ -55,9 +55,12 @@ from prompts import (
 
 CONFIG_PROVEEDOR = {
     "anthropic": {
+        # Las tres fases con Sonnet 5. Para devolver el análisis jurídico a
+        # Opus 5 —que es donde se nota, en la fase 1— basta con cambiar la
+        # línea de "modulos" por "claude-opus-5".
         "modelos": {
             "triaje": "claude-sonnet-5",
-            "modulos": "claude-opus-5",
+            "modulos": "claude-sonnet-5",
             "informe": "claude-sonnet-5",
         },
         # El razonamiento interno son tokens de salida: se pagan y se esperan.
