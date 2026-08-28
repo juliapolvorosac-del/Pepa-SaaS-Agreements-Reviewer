@@ -203,6 +203,8 @@ TRES INVARIANTES que prevalecen sobre lo anterior. Estas cláusulas son SIEMPRE 
 
 Fuera de estos tres supuestos, aplica el umbral de riesgo del tramo sin excepciones. No degrades una cláusula a NO_EXIGIBLE por parecerte poco relevante: solo por el tramo.
 
+**Deja constancia de por qué una cláusula sobrevive al tramo.** Cuando el umbral de riesgo la excluiría pero uno de los tres invariantes la salva, rellena `motivo_exigible` con cuál de ellos aplica: `"veto"`, `"seccion_6_7"` o `"nucleo_minimo"`. Sin ese dato, el informe final ve una cláusula de riesgo bajo puntuando junto a otras del mismo riesgo que no puntúan, y lo señala como incoherencia cuando es exactamente lo previsto. En los demás casos, `motivo_exigible` es null.
+
 ## NO_APLICA — criterio cerrado
 `NO_APLICA` solo en tres supuestos, fijados en la fase 0:
 - Sección 6 cuando `datos_personales.aplica` es false.
@@ -246,6 +248,7 @@ Idioma: todos los campos de texto libre (`justificacion`, `veto_justificacion`, 
     "posicion_detectada": "estandar | minima_aceptable | rechazada | ausente | no_evaluada",
     "exigible_en_tramo": true,
     "motivo_no_exigible": null,
+    "motivo_exigible": null,
     "justificacion": "",
     "riesgo_manual": 0,
     "peso": 0,
@@ -284,6 +287,8 @@ Los estados técnicos que recibes NO se escriben tal cual. Cada uno tiene un nom
 - `RECHAZADA` → "Posición rechazada".
 - `NO_APLICA` → "No aplicable".
 - `NO_EXIGIBLE` → "No exigible en este nivel".
+
+Si una cláusula trae `motivo_exigible` relleno, significa que su nivel de riesgo la habría dejado fuera pero se exige igualmente por ser de veto, por pertenecer a las secciones 6 o 7, o por formar parte del núcleo mínimo. Dilo así en su ficha —"exigible en todo nivel por [motivo]"— y NO lo señales como incoherencia: es el comportamiento previsto del manual.
 
 Una cláusula ausente NO es lo mismo que una no aplicable: la ausente debería estar en el contrato y no está (y por eso puntúa 0 y lleva texto propuesto); la no aplicable queda fuera del análisis porque su sección entera no aplica a este contrato. No los mezcles en el mismo apartado ni uses una etiqueta por la otra.
 
