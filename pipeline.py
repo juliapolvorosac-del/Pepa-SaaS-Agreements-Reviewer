@@ -25,8 +25,8 @@ import anthropic
 
 from prompts import (
     MODULOS,
-    PROMPT_FASE_0,
     PROMPT_FASE_2,
+    construir_prompt_fase_0,
     construir_prompt_fase_1,
 )
 
@@ -82,7 +82,10 @@ CONFIG_PROVEEDOR = {
         "max_tokens": {"triaje": 8000, "modulos": 16000, "informe": 32000},
         "cache": False,
         "paralelo": False,
-        "pausa_entre_llamadas": 1.2,
+        # El plan gratuito limita peticiones por segundo Y tokens por minuto.
+        # Con el manual viajando entero en cada llamada, el segundo límite se
+        # alcanza enseguida: la pausa tiene que ser generosa.
+        "pausa_entre_llamadas": 6.0,
         "tolerar_truncamiento": True,
     },
 }
@@ -284,12 +287,18 @@ class ClienteMistral:
         self.api_key = api_key
         self.timeout = timeout
 
+    # Esperas crecientes ante un 429. El plan gratuito limita peticiones por
+    # segundo Y tokens por minuto: con el manual viajando entero en cada
+    # llamada, el segundo límite se alcanza con facilidad y hace falta esperar
+    # bastante más de unos pocos segundos.
+    ESPERAS_429 = (5, 15, 30, 60)
+
     def completar(self, modelo: str, mensajes: list, max_tokens: int) -> dict:
         cuerpo = json.dumps(
             {"model": modelo, "messages": mensajes, "max_tokens": max_tokens}
         ).encode("utf-8")
 
-        for intento in range(3):
+        for intento in range(len(self.ESPERAS_429) + 1):
             peticion = urllib.request.Request(
                 self.URL,
                 data=cuerpo,
@@ -304,14 +313,23 @@ class ClienteMistral:
                 with urllib.request.urlopen(peticion, timeout=self.timeout) as r:
                     return json.loads(r.read().decode("utf-8"))
             except urllib.error.HTTPError as e:
-                # 429 = límite de peticiones del plan gratuito. Se espera y
-                # se reintenta; el resto de errores se propagan con su detalle.
-                if e.code == 429 and intento < 2:
-                    time.sleep(3 * (intento + 1))
+                # 429 = límite de peticiones del plan gratuito. Se espera y se
+                # reintenta; el resto de errores se propagan con su detalle.
+                if e.code == 429 and intento < len(self.ESPERAS_429):
+                    time.sleep(self._espera(e, self.ESPERAS_429[intento]))
                     continue
                 detalle = e.read().decode("utf-8", errors="replace")[:500]
                 raise RuntimeError(f"Mistral devolvió HTTP {e.code}: {detalle}") from e
-        raise RuntimeError("Mistral: límite de peticiones superado tras 3 intentos")
+        raise RuntimeError("Mistral: límite de peticiones superado tras varios intentos")
+
+    @staticmethod
+    def _espera(error, por_defecto: float) -> float:
+        """Respeta la cabecera Retry-After si el servidor la envía."""
+        cabecera = error.headers.get("Retry-After") if error.headers else None
+        try:
+            return max(float(cabecera), por_defecto)
+        except (TypeError, ValueError):
+            return por_defecto
 
 
 def _crear_cliente(api_key: str, proveedor: str):
@@ -425,13 +443,14 @@ def _llamada(cliente, *, proveedor, modelo, system=None, contenido_usuario,
 # FASE 0 · Triaje
 # ---------------------------------------------------------------------------
 
-def fase_0(cliente, contrato: str, contador=None, proveedor=PROVEEDOR_POR_DEFECTO) -> dict:
+def fase_0(cliente, contrato: str, contador=None, proveedor=PROVEEDOR_POR_DEFECTO,
+           tramo=None) -> dict:
     cfg = config(proveedor)
     respuesta = _llamada(
         cliente,
         proveedor=proveedor,
         modelo=cfg["modelos"]["triaje"],
-        system=PROMPT_FASE_0,
+        system=construir_prompt_fase_0(tramo),
         contenido_usuario=contrato,
         max_tokens=cfg["max_tokens"]["triaje"],
         esfuerzo=cfg["esfuerzo"].get("triaje"),
@@ -780,12 +799,16 @@ def verificar_transcripcion(agregado: dict, html: str) -> bool:
 # ---------------------------------------------------------------------------
 
 def ejecutar_analisis(contrato: str, manual: str, api_key: str, progreso=None,
-                      proveedor=PROVEEDOR_POR_DEFECTO) -> dict:
+                      proveedor=PROVEEDOR_POR_DEFECTO, tramo=None) -> dict:
     """Ejecuta las tres fases. `progreso` es un callable(etapa, actual, total)
     con etapa en {"triaje", "modulos", "informe"}.
 
     `proveedor` es "anthropic" (producción) o "mistral" (preproducción a coste
     cero, solo para comprobar que el código funciona).
+
+    `tramo` es el nivel de exigencia ("A", "B" o "C") que ha elegido el usuario.
+    Sustituye a la estimación del triaje: el usuario conoce el importe y la
+    criticidad del servicio, y el contrato a menudo no.
 
     Nada se persiste: todo vive en memoria y se descarta al terminar (briefing §8).
     """
@@ -806,11 +829,21 @@ def ejecutar_analisis(contrato: str, manual: str, api_key: str, progreso=None,
             futuro_cache = pre_pool.submit(
                 _precalentar_cache, cliente, manual, contrato, contador, proveedor
             )
-            fase0 = fase_0(cliente, contrato, contador, proveedor)
+            fase0 = fase_0(cliente, contrato, contador, proveedor, tramo)
             futuro_cache.result()
     else:
-        fase0 = fase_0(cliente, contrato, contador, proveedor)
+        fase0 = fase_0(cliente, contrato, contador, proveedor, tramo)
     tiempos["triaje"] = time.monotonic() - marca
+
+    # El tramo lo decide el usuario, no el triaje. Se impone sobre lo que haya
+    # devuelto el modelo, para que no quepa discrepancia entre lo marcado en la
+    # pantalla y lo aplicado en la revisión.
+    if tramo in ("A", "B", "C"):
+        fase0["tramo_exigibilidad"] = tramo
+        fase0["criterio_tramo"] = "indicado_por_el_usuario"
+        fase0["nota_tramo"] = (
+            "Nivel de exigencia seleccionado por el usuario antes del análisis."
+        )
 
     def progreso_modulos(actual, total):
         if progreso:
@@ -830,6 +863,10 @@ def ejecutar_analisis(contrato: str, manual: str, api_key: str, progreso=None,
 
     if progreso:
         progreso("informe", 0, 0)
+    # El último módulo acaba de terminar: sin esta pausa, la llamada del
+    # informe sale disparada y choca con el límite de peticiones.
+    if cfg["pausa_entre_llamadas"]:
+        time.sleep(cfg["pausa_entre_llamadas"])
     marca = time.monotonic()
     html, informe_truncado = fase_2(
         cliente, fase0, resultados, incidencias, agregado, contador, proveedor
