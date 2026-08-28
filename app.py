@@ -6,6 +6,7 @@ Privacidad (briefing §8): nada se persiste; los documentos se procesan en
 memoria, se envían únicamente a la API de Anthropic y se descartan.
 """
 
+import time
 import traceback
 from pathlib import Path
 
@@ -14,6 +15,7 @@ import streamlit.components.v1 as components
 
 from extraccion import normalizar_documentos
 from pipeline import (
+    ErrorProveedorNoDisponible,
     ErrorSaldoInsuficiente,
     ErrorTriaje,
     ErrorTruncamiento,
@@ -139,6 +141,16 @@ if "analisis_realizados" not in st.session_state:
     st.session_state.analisis_realizados = 0
 
 
+def _duracion(segundos) -> str:
+    """Formatea una duración en lenguaje llano: '45 s', '2 min 34 s'."""
+    if segundos is None:
+        return "—"
+    segundos = int(round(segundos))
+    if segundos < 60:
+        return f"{segundos} s"
+    return f"{segundos // 60} min {segundos % 60:02d} s"
+
+
 def _cargar_manual() -> str:
     # Ruta relativa al fichero (necesario en Streamlit Cloud) y nombre en
     # minúsculas (Linux distingue mayúsculas).
@@ -173,8 +185,9 @@ def pantalla_informe():
     # (nunca el modelo): una sola fuente de verdad, mostrada aquí de forma
     # nativa para que no dependa de cómo lo transcriba el HTML del informe.
     consumo = resultado.get("consumo")
+    tiempos = resultado.get("tiempos") or {}
 
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3, col4, col5 = st.columns(5)
     col1.metric(
         "Score (calculado por la aplicación)",
         f"{agregado['score_pct']} %" if agregado["score_pct"] is not None else "N/D",
@@ -183,6 +196,8 @@ def pantalla_informe():
     col3.metric("Vetos disparados", "Sí" if agregado["hay_veto_disparado"] else "No")
     if consumo:
         col4.metric("Coste de la revisión", f"{consumo['coste_total_usd']:.2f} $")
+    if tiempos.get("total"):
+        col5.metric("Duración", _duracion(tiempos["total"]))
     st.caption(
         f"Σ peso×puntuación = {agregado['suma_ponderada']} · "
         f"Σ pesos = {agregado['suma_pesos']} · "
@@ -194,16 +209,27 @@ def pantalla_informe():
             """Miles con punto, al modo español."""
             return f"{valor:,}".replace(",", ".")
 
-        with st.expander("Detalle del consumo"):
+        # Cada línea del consumo lleva su duración; la clave de la fase coincide
+        # con la que usa el cronómetro del pipeline.
+        clave_tiempo = {
+            "Fase 0 · Triaje": "triaje",
+            "Fase 1 · Revisión por módulos": "modulos",
+            "Fase 2 · Informe": "informe",
+        }
+
+        with st.expander("Detalle del consumo y los tiempos"):
             for fila in consumo["por_fase"]:
                 entrada = f"{_n(fila['entrada'])} nuevos"
                 if fila["cache_lectura"]:
                     entrada += f" + {_n(fila['cache_lectura'])} desde caché"
                 if fila["cache_escritura"]:
                     entrada += f" + {_n(fila['cache_escritura'])} escritos en caché"
+                duracion = tiempos.get(clave_tiempo.get(fila["nombre"], ""))
+                sufijo_tiempo = f" · ⏱ {_duracion(duracion)}" if duracion else ""
                 st.markdown(
                     f"**{fila['nombre']}** — {fila['llamadas']} "
-                    f"{'llamada' if fila['llamadas'] == 1 else 'llamadas'} · {fila['modelo']}  \n"
+                    f"{'llamada' if fila['llamadas'] == 1 else 'llamadas'} · "
+                    f"{fila['modelo']}{sufijo_tiempo}  \n"
                     f"Entrada: {entrada} → {fila['coste_entrada_usd']:.3f} $  \n"
                     f"Generados: {_n(fila['salida'])} → {fila['coste_salida_usd']:.3f} $  \n"
                     f"Subtotal: **{fila['coste_usd']:.3f} $**"
@@ -211,7 +237,8 @@ def pantalla_informe():
             st.markdown("---")
             st.markdown(
                 f"**Total: {consumo['coste_total_usd']:.2f} $** "
-                f"({consumo['n_llamadas']} llamadas)  \n"
+                f"({consumo['n_llamadas']} llamadas) · "
+                f"**Duración: {_duracion(tiempos.get('total'))}**  \n"
                 f"Texto enviado (entrada): {consumo['coste_entrada_usd']:.2f} $ · "
                 f"Texto generado (salida): {consumo['coste_salida_usd']:.2f} $ "
                 f"— **{consumo['pct_salida']} % del total**  \n"
@@ -343,15 +370,22 @@ def pantalla_subida():
     mensaje_error = None
     detalle_tecnico = None
 
+    inicio = time.monotonic()
+
     with st.status("Preparando el análisis…", expanded=True) as estado:
 
         def progreso(etapa, actual, total):
+            # El reloj avanza en cada cambio de fase y cada vez que termina un
+            # módulo: es la señal de que el análisis sigue vivo durante la espera.
+            reloj = f" · ⏱ {_duracion(time.monotonic() - inicio)}"
             if etapa == "triaje":
-                estado.update(label="Analizando el documento…")
+                estado.update(label="Analizando el documento…" + reloj)
             elif etapa == "modulos":
-                estado.update(label=f"Revisando cláusulas ({actual} de {total})…")
+                estado.update(
+                    label=f"Revisando cláusulas ({actual} de {total})…" + reloj
+                )
             elif etapa == "informe":
-                estado.update(label="Preparando el informe…")
+                estado.update(label="Preparando el informe…" + reloj)
 
         try:
             estado.update(label="Leyendo los documentos…")
@@ -364,7 +398,11 @@ def pantalla_subida():
 
             st.session_state.resultado = resultado
             st.session_state.analisis_realizados += 1
-            estado.update(label="Análisis completado", state="complete")
+            estado.update(
+                label="Análisis completado en "
+                + _duracion(time.monotonic() - inicio),
+                state="complete",
+            )
 
         except ErrorTriaje as e:
             estado.update(label="Análisis detenido", state="error")
@@ -382,6 +420,14 @@ def pantalla_subida():
                 mensaje_error = MENSAJES_ERROR.get(
                     e.codigo, MENSAJES_ERROR["version_manual_no_coincide"]
                 )
+        except ErrorProveedorNoDisponible as e:
+            estado.update(label="Análisis detenido", state="error")
+            detalle_tecnico = traceback.format_exc()
+            mensaje_error = (
+                "El servicio no está disponible en este momento por un problema "
+                "de configuración ajeno al documento."
+                + (f"\n\n**(Modo depuración: {e})**" if MODO_DEPURACION else "")
+            )
         except ErrorSaldoInsuficiente:
             estado.update(label="Análisis detenido", state="error")
             detalle_tecnico = traceback.format_exc()
