@@ -170,24 +170,47 @@ st.markdown(
         }
     }
 
-    /* ---------- Botones ---------- */
-    .stButton > button, [data-testid="stBaseButton-primary"] {
+    /* ---------- Botones ----------
+       Todo botón de la zona principal va en índigo con texto blanco cálido.
+       El color hay que forzarlo TAMBIÉN en los elementos internos: Streamlit
+       envuelve la etiqueta en otra etiqueta, y la regla general de arriba la
+       pintaría de índigo sobre índigo, dejándola ilegible. */
+    .stButton > button,
+    .stDownloadButton > button,
+    [data-testid="stBaseButton-primary"],
+    [data-testid="stBaseButton-secondary"],
+    [data-testid="stBaseButton-secondaryFormSubmit"],
+    [data-testid="stFileUploader"] button,
+    [data-testid="stFileUploaderDropzone"] button {
         background-color: #2F2E48 !important;
-        color: #F8F3F3 !important;
         border: 1px solid #2F2E48 !important;
-        border-radius: 8px;
+        border-radius: 8px !important;
         font-weight: 600;
     }
+    .stButton > button, .stButton > button *,
+    .stDownloadButton > button, .stDownloadButton > button *,
+    [data-testid="stBaseButton-primary"], [data-testid="stBaseButton-primary"] *,
+    [data-testid="stBaseButton-secondary"], [data-testid="stBaseButton-secondary"] *,
+    [data-testid="stBaseButton-secondaryFormSubmit"],
+    [data-testid="stBaseButton-secondaryFormSubmit"] *,
+    [data-testid="stFileUploader"] button,
+    [data-testid="stFileUploader"] button *,
+    [data-testid="stFileUploaderDropzone"] button,
+    [data-testid="stFileUploaderDropzone"] button * {
+        color: #F8F3F3 !important;
+        fill: #F8F3F3 !important;
+    }
     .stButton > button:hover:enabled,
-    .stButton > button:hover:enabled * {
+    [data-testid="stFileUploader"] button:hover,
+    [data-testid="stBaseButton-secondary"]:hover {
         background-color: rgba(47, 46, 72, 0.86) !important;
         border-color: #2F2E48 !important;
-        color: #F8F3F3 !important;
     }
     .stButton > button:disabled, .stButton > button:disabled * {
         background-color: #ABA8E8 !important;
         border-color: #ABA8E8 !important;
-        color: rgba(47, 46, 72, 0.55) !important;
+        color: rgba(47, 46, 72, 0.62) !important;
+        fill: rgba(47, 46, 72, 0.62) !important;
     }
 
     /* ---------- Barra de progreso ---------- */
@@ -233,6 +256,17 @@ st.markdown(
     [data-testid="stFileUploaderDropzone"] {
         background-color: rgba(171, 168, 232, 0.15) !important;
         border: 1.5px dashed #ABA8E8 !important;
+    }
+    /* El nombre del fichero subido y la cruz para quitarlo van sobre fondo
+       claro: aquí el índigo es lo correcto, no el blanco de los botones. */
+    [data-testid="stFileUploaderFile"],
+    [data-testid="stFileUploaderFile"] *,
+    [data-testid="stFileUploaderDeleteBtn"],
+    [data-testid="stFileUploaderDeleteBtn"] * {
+        color: #2F2E48 !important;
+        fill: #2F2E48 !important;
+        background-color: transparent !important;
+        border: none !important;
     }
     [data-testid="stExpander"] details, [data-testid="stExpander"] summary {
         border-color: #ABA8E8 !important;
@@ -429,6 +463,20 @@ def pantalla_informe():
                     f"({_n(consumo['cache_lectura'])} tokens leídos a una décima "
                     f"parte de tarifa): unos **{consumo['ahorro_cache_usd']:.2f} $** "
                     "menos que enviarlos completos en cada llamada."
+                )
+            # Si la revisión por módulos escribió caché en vez de leerla, el
+            # manual se ha pagado una vez por módulo. No rompe el análisis, pero
+            # encarece la revisión y conviene saberlo.
+            modulos = next(
+                (f for f in consumo["por_fase"] if f["nombre"].startswith("Fase 1")),
+                None,
+            )
+            if modulos and modulos["cache_escritura"] and not modulos["cache_lectura"]:
+                st.warning(
+                    "⚠️ La caché no se reutilizó en la revisión por módulos: cada "
+                    "uno reescribió el manual en lugar de leerlo, lo que ha "
+                    "encarecido esta revisión alrededor de un 20 %. No afecta al "
+                    "análisis. Si se repite en la siguiente, conviene revisarlo."
                 )
             st.caption(
                 "Estimación calculada sobre los tokens realmente consumidos y "
