@@ -14,6 +14,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 from extraccion import normalizar_documentos
+from prompts import TRAMOS
 from pipeline import (
     ErrorProveedorNoDisponible,
     ErrorSaldoInsuficiente,
@@ -47,10 +48,7 @@ CLAVE_API_POR_PROVEEDOR = {
     "mistral": "MISTRAL_API_KEY",
 }
 
-TEXTO_CASILLA = (
-    "Confirmo que este documento no está sujeto a un acuerdo de confidencialidad "
-    "y no contiene datos personales."
-)
+TRAMO_POR_DEFECTO = "B"
 
 # Mensajes de error de la fase 0 (briefing §5)
 MENSAJES_ERROR = {
@@ -152,14 +150,10 @@ def _duracion(segundos) -> str:
 
 
 def _cargar_manual() -> str:
+    # Ruta relativa al fichero (necesario en Streamlit Cloud) y nombre en
+    # minúsculas (Linux distingue mayúsculas).
     ruta = Path(__file__).parent / "manual.txt"
-    texto = ruta.read_text(encoding="utf-8")
-    if texto.count("POSICIÓN MÍNIMA ACEPTABLE") < 30:
-        raise RuntimeError(
-            "manual.txt no parece el manual de revisión: faltan los bloques "
-            "de posiciones. Revisa que el fichero subido sea el correcto."
-        )
-    return texto
+    return ruta.read_text(encoding="utf-8")
 
 
 # ---------------------------------------------------------------------------
@@ -323,7 +317,8 @@ def pantalla_subida():
 1. Sube el contrato SaaS en PDF, DOCX, TXT o MD. El PDF debe tener texto seleccionable: un escaneado sin OCR no sirve.
 2. Incluye todos los documentos anexos si los tienes: order form, DPA, SLA, anexos técnicos. Cuantos más subas, más preciso será el análisis.
 3. No subas documentos confidenciales, sujetos a acuerdos de confidencialidad, ni con datos personales.
-4. Espera al informe. La herramienta no te hará preguntas: cuando falte un dato, asumirá lo más prudente y te dirá qué ha asumido.
+4. Elige el nivel de exigencia según el importe y la importancia del servicio para tu negocio.
+5. Espera al informe. La herramienta no te hará más preguntas: cuando falte un dato, asumirá lo más prudente y te dirá qué ha asumido.
         """
     )
 
@@ -333,12 +328,28 @@ def pantalla_subida():
         accept_multiple_files=True,
     )
 
-    confirmado = st.checkbox(TEXTO_CASILLA)
+    # Nivel de exigencia. Lo elige el usuario porque conoce el importe y la
+    # criticidad del servicio, dos datos que el contrato a menudo no recoge y
+    # que la herramienta tendría que asumir.
+    st.markdown("**¿Qué nivel de exigencia aplicamos a este contrato?**")
+    tramo = st.radio(
+        "Nivel de exigencia",
+        options=list(TRAMOS.keys()),
+        index=list(TRAMOS.keys()).index(TRAMO_POR_DEFECTO),
+        format_func=lambda t: f"{TRAMOS[t]['nombre']} — {TRAMOS[t]['resumen']}",
+        label_visibility="collapsed",
+    )
+    st.caption(
+        TRAMOS[tramo]["detalle"]
+        + " En cualquier nivel se exigen siempre las cláusulas que pueden vetar "
+        "el contrato, todo lo relativo a protección de datos e inteligencia "
+        "artificial, y las cuatro cláusulas del núcleo mínimo."
+    )
 
     analizar = st.button(
         "Analizar contrato",
         type="primary",
-        disabled=not (confirmado and ficheros),
+        disabled=not ficheros,
     )
 
     if not analizar:
@@ -397,7 +408,8 @@ def pantalla_subida():
             manual = _cargar_manual()
 
             resultado = ejecutar_analisis(
-                contrato, manual, api_key, progreso, proveedor=PROVEEDOR
+                contrato, manual, api_key, progreso,
+                proveedor=PROVEEDOR, tramo=tramo,
             )
 
             st.session_state.resultado = resultado
