@@ -2,3 +2,7 @@ streamlit
 anthropic
 pdfplumber
 python-docx
+# Mistral (preproducción) NO necesita ningún paquete: su API se llama con
+# `urllib`, de la biblioteca estándar de Python. Ni el SDK `mistralai` ni
+# `httpx`, porque sus dependencias no siempre tienen versión compatible con el
+# Python del entorno de despliegue y una instalación fallida deja la app rota.
