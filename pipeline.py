@@ -262,21 +262,56 @@ class ErrorSaldoInsuficiente(Exception):
 
 
 class ErrorProveedorNoDisponible(Exception):
-    """El paquete del proveedor seleccionado no está instalado en el entorno."""
+    """El proveedor seleccionado no se ha podido inicializar."""
+
+
+class ClienteMistral:
+    """Cliente mínimo para la API de Mistral por HTTP directo.
+
+    No se usa el SDK `mistralai` a propósito: sus dependencias no siempre tienen
+    versión compatible con la que use el entorno de despliegue, y una
+    instalación fallida deja el paquete inservible. La API de Mistral es un
+    simple POST con formato estilo OpenAI, e `httpx` ya viene instalado como
+    dependencia del SDK de Anthropic. Así preproducción no puede romperse por un
+    problema de empaquetado.
+    """
+
+    URL = "https://api.mistral.ai/v1/chat/completions"
+
+    def __init__(self, api_key: str, timeout: float = 600.0):
+        import httpx
+
+        self._httpx = httpx
+        self.cliente = httpx.Client(
+            timeout=timeout,
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+        )
+
+    def completar(self, modelo: str, mensajes: list, max_tokens: int) -> dict:
+        cuerpo = {"model": modelo, "messages": mensajes, "max_tokens": max_tokens}
+        for intento in range(3):
+            respuesta = self.cliente.post(self.URL, json=cuerpo)
+            # 429 = límite de peticiones del plan gratuito. Se espera y reintenta.
+            if respuesta.status_code == 429 and intento < 2:
+                time.sleep(3 * (intento + 1))
+                continue
+            respuesta.raise_for_status()
+            return respuesta.json()
+        respuesta.raise_for_status()
+        return respuesta.json()
 
 
 def _crear_cliente(api_key: str, proveedor: str):
     if proveedor == "mistral":
-        # Import perezoso: si no se usa Mistral, no hace falta el paquete.
         try:
-            from mistralai import Mistral
-        except ImportError as e:
+            return ClienteMistral(api_key)
+        except Exception as e:
             raise ErrorProveedorNoDisponible(
-                "El paquete 'mistralai' (versión 1.0 o superior) no está "
-                "instalado en el entorno. Comprueba que requirements.txt lo "
-                "incluye y fuerza una reinstalación de dependencias."
+                f"No se ha podido inicializar el cliente de Mistral: {e}"
             ) from e
-        return Mistral(api_key=api_key)
     return anthropic.Anthropic(api_key=api_key, max_retries=3)
 
 
@@ -338,17 +373,15 @@ def _llamada_mistral(cliente, modelo, system, contenido_usuario, max_tokens):
         mensajes.append({"role": "system", "content": system})
     mensajes.append({"role": "user", "content": _a_texto_plano(contenido_usuario)})
 
-    respuesta = cliente.chat.complete(
-        model=modelo, messages=mensajes, max_tokens=max_tokens
-    )
-    eleccion = respuesta.choices[0]
-    uso = getattr(respuesta, "usage", None)
+    datos = cliente.completar(modelo, mensajes, max_tokens)
+    eleccion = (datos.get("choices") or [{}])[0]
+    uso = datos.get("usage") or {}
     return Respuesta(
-        texto=eleccion.message.content or "",
-        truncada=(getattr(eleccion, "finish_reason", "") == "length"),
+        texto=(eleccion.get("message") or {}).get("content") or "",
+        truncada=(eleccion.get("finish_reason") == "length"),
         uso={
-            "entrada": getattr(uso, "prompt_tokens", 0) or 0,
-            "salida": getattr(uso, "completion_tokens", 0) or 0,
+            "entrada": uso.get("prompt_tokens", 0) or 0,
+            "salida": uso.get("completion_tokens", 0) or 0,
             "cache_escritura": 0,
             "cache_lectura": 0,
         },
