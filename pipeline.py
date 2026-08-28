@@ -14,6 +14,7 @@ Detalles de API que respeta este módulo (briefing §3):
 
 import json
 import re
+import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import anthropic
@@ -63,6 +64,118 @@ DESPLAZADAS_EEUU = {
 }
 
 
+# ---------------------------------------------------------------------------
+# Contador de consumo y coste
+#
+# Tarifas publicadas por Anthropic, en dólares por millón de tokens. Si cambian,
+# se actualizan aquí. La escritura en caché cuesta 1,25 veces la tarifa de
+# entrada y la lectura desde caché solo 0,10 veces: de ahí sale el ahorro que
+# produce reutilizar el manual y el contrato en los 6-7 módulos de la fase 1.
+# ---------------------------------------------------------------------------
+
+PRECIOS_USD_POR_MILLON = {
+    "claude-opus-5": {"entrada": 5.00, "salida": 25.00},
+    "claude-sonnet-5": {"entrada": 3.00, "salida": 15.00},
+}
+MULT_ESCRITURA_CACHE = 1.25
+MULT_LECTURA_CACHE = 0.10
+
+NOMBRE_FASE = {
+    "triaje": "Fase 0 · Triaje",
+    "cache": "Precalentamiento de caché",
+    "modulos": "Fase 1 · Revisión por módulos",
+    "informe": "Fase 2 · Informe",
+}
+
+
+class ContadorUso:
+    """Acumula el consumo de tokens de todas las llamadas del análisis.
+
+    Las llamadas de la fase 1 corren en paralelo, así que el acumulador va
+    protegido por un cerrojo.
+    """
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._registros = []
+
+    def registrar(self, fase: str, modelo: str, usage) -> None:
+        if usage is None:
+            return
+        with self._lock:
+            self._registros.append({
+                "fase": fase,
+                "modelo": modelo,
+                "entrada": getattr(usage, "input_tokens", 0) or 0,
+                "salida": getattr(usage, "output_tokens", 0) or 0,
+                "cache_escritura": getattr(usage, "cache_creation_input_tokens", 0) or 0,
+                "cache_lectura": getattr(usage, "cache_read_input_tokens", 0) or 0,
+            })
+
+    @staticmethod
+    def _coste(registro: dict) -> float:
+        tarifa = PRECIOS_USD_POR_MILLON.get(registro["modelo"])
+        if tarifa is None:
+            return 0.0
+        return (
+            registro["entrada"] * tarifa["entrada"]
+            + registro["cache_escritura"] * tarifa["entrada"] * MULT_ESCRITURA_CACHE
+            + registro["cache_lectura"] * tarifa["entrada"] * MULT_LECTURA_CACHE
+            + registro["salida"] * tarifa["salida"]
+        ) / 1_000_000
+
+    def resumen(self) -> dict:
+        with self._lock:
+            registros = list(self._registros)
+
+        por_fase = {}
+        total = 0.0
+        tokens_entrada = tokens_salida = cache_lectura = cache_escritura = 0
+        ahorro = 0.0
+
+        for r in registros:
+            coste = self._coste(r)
+            total += coste
+            tokens_entrada += r["entrada"]
+            tokens_salida += r["salida"]
+            cache_lectura += r["cache_lectura"]
+            cache_escritura += r["cache_escritura"]
+
+            tarifa = PRECIOS_USD_POR_MILLON.get(r["modelo"])
+            if tarifa:
+                # Lo que habrían costado los tokens leídos de caché si se
+                # hubieran enviado enteros en cada llamada.
+                ahorro += (
+                    r["cache_lectura"] * tarifa["entrada"] * (1 - MULT_LECTURA_CACHE)
+                ) / 1_000_000
+
+            fila = por_fase.setdefault(
+                r["fase"],
+                {"nombre": NOMBRE_FASE.get(r["fase"], r["fase"]), "llamadas": 0,
+                 "modelo": r["modelo"], "coste_usd": 0.0, "salida": 0},
+            )
+            fila["llamadas"] += 1
+            fila["coste_usd"] += coste
+            fila["salida"] += r["salida"]
+
+        for fila in por_fase.values():
+            fila["coste_usd"] = round(fila["coste_usd"], 4)
+
+        return {
+            "coste_total_usd": round(total, 4),
+            "ahorro_cache_usd": round(ahorro, 4),
+            "tokens_entrada": tokens_entrada,
+            "tokens_salida": tokens_salida,
+            "cache_lectura": cache_lectura,
+            "cache_escritura": cache_escritura,
+            "n_llamadas": len(registros),
+            "por_fase": [
+                por_fase[f] for f in ("triaje", "cache", "modulos", "informe")
+                if f in por_fase
+            ],
+        }
+
+
 class ErrorTriaje(Exception):
     """La fase 0 (o la comprobación de versión de la fase 1) rechazó el documento."""
 
@@ -75,6 +188,11 @@ class ErrorTriaje(Exception):
 
 class ErrorTruncamiento(Exception):
     """La fase 2 devolvió un informe cortado por max_tokens."""
+
+
+class ErrorSaldoInsuficiente(Exception):
+    """La cuenta de Anthropic no tiene saldo. No es un fallo del análisis:
+    es un problema de facturación del titular de la clave API."""
 
 
 def _crear_cliente(api_key: str) -> anthropic.Anthropic:
@@ -102,7 +220,8 @@ def _extraer_json(texto: str):
     return json.loads(texto[inicio:fin])
 
 
-def _llamada(cliente, *, modelo, system=None, contenido_usuario, max_tokens, esfuerzo=None):
+def _llamada(cliente, *, modelo, system=None, contenido_usuario, max_tokens,
+             esfuerzo=None, contador=None, fase=None):
     """Llamada en streaming; devuelve el mensaje final completo."""
     kwargs = {
         "model": modelo,
@@ -113,15 +232,25 @@ def _llamada(cliente, *, modelo, system=None, contenido_usuario, max_tokens, esf
         kwargs["system"] = system
     if esfuerzo is not None:
         kwargs["output_config"] = {"effort": esfuerzo}
-    with cliente.messages.stream(**kwargs) as stream:
-        return stream.get_final_message()
+    try:
+        with cliente.messages.stream(**kwargs) as stream:
+            mensaje = stream.get_final_message()
+        if contador is not None:
+            contador.registrar(fase, modelo, getattr(mensaje, "usage", None))
+        return mensaje
+    except anthropic.BadRequestError as e:
+        # Falta de saldo: no es un fallo del análisis, y reintentarlo no sirve
+        # de nada. Se distingue para poder dar un mensaje honesto.
+        if "credit balance" in str(e).lower():
+            raise ErrorSaldoInsuficiente() from e
+        raise
 
 
 # ---------------------------------------------------------------------------
 # FASE 0 · Triaje
 # ---------------------------------------------------------------------------
 
-def fase_0(cliente, contrato: str) -> dict:
+def fase_0(cliente, contrato: str, contador=None) -> dict:
     mensaje = _llamada(
         cliente,
         modelo=MODELO_FASE_0,
@@ -129,6 +258,8 @@ def fase_0(cliente, contrato: str) -> dict:
         contenido_usuario=contrato,
         max_tokens=MAX_TOKENS_FASE_0,
         esfuerzo=ESFUERZO_FASE_0,
+        contador=contador,
+        fase="triaje",
     )
     if mensaje.stop_reason == "max_tokens":
         raise ValueError("fase 0: respuesta truncada por max_tokens")
@@ -164,32 +295,34 @@ def _bloques_cacheados(manual: str, contrato: str) -> list:
     ]
 
 
-def _precalentar_cache(cliente, manual: str, contrato: str) -> None:
+def _precalentar_cache(cliente, manual: str, contrato: str, contador=None) -> None:
     """Escribe el prefijo manual+contrato en el caché con una llamada mínima,
     para que las llamadas paralelas de la fase 1 lo lean en vez de escribirlo
     cada una por su cuenta. Si falla, se continúa sin caché: solo afecta al coste."""
     # El caché es por modelo: el precalentamiento debe usar el MISMO modelo que
     # las llamadas de la fase 1.
-    try:
-        cliente.messages.create(
+    def _intento(max_tokens):
+        mensaje = cliente.messages.create(
             model=MODELO_FASE_1,
-            max_tokens=0,
+            max_tokens=max_tokens,
             messages=[{"role": "user", "content": _bloques_cacheados(manual, contrato)}],
         )
+        if contador is not None:
+            contador.registrar("cache", MODELO_FASE_1, getattr(mensaje, "usage", None))
+
+    try:
+        _intento(0)
     except anthropic.BadRequestError:
         try:
-            cliente.messages.create(
-                model=MODELO_FASE_1,
-                max_tokens=1,
-                messages=[{"role": "user", "content": _bloques_cacheados(manual, contrato)}],
-            )
+            _intento(1)
         except Exception:
             pass
     except Exception:
         pass
 
 
-def _revisar_modulo(cliente, id_modulo: str, manual: str, contrato: str, json_fase_0: str, reintento: bool = False):
+def _revisar_modulo(cliente, id_modulo: str, manual: str, contrato: str, json_fase_0: str,
+                    reintento: bool = False, contador=None):
     """Una llamada de fase 1. El prompt del módulo va DESPUÉS de los bloques
     cacheados para no romper el prefijo compartido del caché (el prompt cambia
     por módulo; el manual y el contrato no)."""
@@ -202,6 +335,8 @@ def _revisar_modulo(cliente, id_modulo: str, manual: str, contrato: str, json_fa
         contenido_usuario=contenido,
         max_tokens=MAX_TOKENS_FASE_1,
         esfuerzo=ESFUERZO_FASE_1,
+        contador=contador,
+        fase="modulos",
     )
     if mensaje.stop_reason == "max_tokens":
         raise ValueError("respuesta truncada")
@@ -215,7 +350,8 @@ def _revisar_modulo(cliente, id_modulo: str, manual: str, contrato: str, json_fa
     return resultado
 
 
-def fase_1(cliente, fase0: dict, manual: str, contrato: str, progreso=None, cache_precalentada=False):
+def fase_1(cliente, fase0: dict, manual: str, contrato: str, progreso=None,
+           cache_precalentada=False, contador=None):
     """Lanza los módulos en paralelo. Si un módulo falla (recuento, JSON o
     truncamiento), se reintenta UNA vez con una nota correctiva —sin ella, un
     reintento con la misma entrada exacta puede reproducir el mismo fallo
@@ -227,20 +363,25 @@ def fase_1(cliente, fase0: dict, manual: str, contrato: str, progreso=None, cach
 
     json_fase_0 = json.dumps(fase0, ensure_ascii=False, indent=2)
     if not cache_precalentada:
-        _precalentar_cache(cliente, manual, contrato)
+        _precalentar_cache(cliente, manual, contrato, contador)
 
     resultados = {}
     incidencias = []
 
     def tarea(id_modulo):
         try:
-            return id_modulo, _revisar_modulo(cliente, id_modulo, manual, contrato, json_fase_0), None
-        except ErrorTriaje:
+            return id_modulo, _revisar_modulo(
+                cliente, id_modulo, manual, contrato, json_fase_0, contador=contador
+            ), None
+        except (ErrorTriaje, ErrorSaldoInsuficiente):
+            # Sin saldo no tiene sentido reintentar ni seguir con los demás
+            # módulos: se propaga de inmediato.
             raise
         except Exception as primera:
             try:
                 resultado = _revisar_modulo(
-                    cliente, id_modulo, manual, contrato, json_fase_0, reintento=True
+                    cliente, id_modulo, manual, contrato, json_fase_0,
+                    reintento=True, contador=contador
                 )
                 return id_modulo, resultado, None
             except ErrorTriaje:
@@ -268,7 +409,8 @@ def fase_1(cliente, fase0: dict, manual: str, contrato: str, progreso=None, cach
 # FASE 2 · Consolidación e informe
 # ---------------------------------------------------------------------------
 
-def fase_2(cliente, fase0: dict, resultados: dict, incidencias_pipeline: list, agregado: dict) -> str:
+def fase_2(cliente, fase0: dict, resultados: dict, incidencias_pipeline: list,
+           agregado: dict, contador=None) -> str:
     """Consolidación. NO se envían ni el contrato ni el manual (briefing §2)."""
     partes = [
         "## JSON DE LA FASE 0 (TRIAJE)\n\n"
@@ -299,6 +441,8 @@ def fase_2(cliente, fase0: dict, resultados: dict, incidencias_pipeline: list, a
         contenido_usuario="\n\n---\n\n".join(partes),
         max_tokens=MAX_TOKENS_FASE_2,
         esfuerzo=ESFUERZO_FASE_2,
+        contador=contador,
+        fase="informe",
     )
     if mensaje.stop_reason == "max_tokens":
         raise ErrorTruncamiento()
@@ -432,6 +576,7 @@ def ejecutar_analisis(contrato: str, manual: str, api_key: str, progreso=None) -
     Nada se persiste: todo vive en memoria y se descarta al terminar (briefing §8).
     """
     cliente = _crear_cliente(api_key)
+    contador = ContadorUso()
 
     if progreso:
         progreso("triaje", 0, 0)
@@ -439,8 +584,8 @@ def ejecutar_analisis(contrato: str, manual: str, api_key: str, progreso=None) -
     # manual y el contrato), así que se lanza en paralelo con la fase 0 en vez
     # de esperar a que termine: se ahorra ese tiempo por completo.
     with ThreadPoolExecutor(max_workers=1) as pre_pool:
-        futuro_cache = pre_pool.submit(_precalentar_cache, cliente, manual, contrato)
-        fase0 = fase_0(cliente, contrato)
+        futuro_cache = pre_pool.submit(_precalentar_cache, cliente, manual, contrato, contador)
+        fase0 = fase_0(cliente, contrato, contador)
         futuro_cache.result()
 
     def progreso_modulos(actual, total):
@@ -448,7 +593,8 @@ def ejecutar_analisis(contrato: str, manual: str, api_key: str, progreso=None) -
             progreso("modulos", actual, total)
 
     resultados, incidencias, _ = fase_1(
-        cliente, fase0, manual, contrato, progreso_modulos, cache_precalentada=True
+        cliente, fase0, manual, contrato, progreso_modulos,
+        cache_precalentada=True, contador=contador,
     )
 
     if not resultados:
@@ -458,7 +604,7 @@ def ejecutar_analisis(contrato: str, manual: str, api_key: str, progreso=None) -
 
     if progreso:
         progreso("informe", 0, 0)
-    html = fase_2(cliente, fase0, resultados, incidencias, agregado)
+    html = fase_2(cliente, fase0, resultados, incidencias, agregado, contador)
 
     return {
         "fase0": fase0,
@@ -467,4 +613,5 @@ def ejecutar_analisis(contrato: str, manual: str, api_key: str, progreso=None) -
         "html": html,
         "agregado": agregado,
         "aviso_transcripcion": verificar_transcripcion(agregado, html),
+        "consumo": contador.resumen(),
     }
