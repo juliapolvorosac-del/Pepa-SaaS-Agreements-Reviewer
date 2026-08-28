@@ -1,8 +1,8 @@
 streamlit
 anthropic
-# La clase Mistral existe a partir de la versión 1.0. En las 0.x el cliente se
-# llamaba MistralClient y vivía en otro sitio: sin fijar la versión, una
-# instalación antigua rompe la importación.
-mistralai>=1.0.0
 pdfplumber
 python-docx
+# Mistral (preproducción) NO necesita paquete: se llama a su API por HTTP con
+# httpx, que ya viene instalado como dependencia del SDK de Anthropic. El
+# paquete `mistralai` se retiró de aquí porque sus dependencias no siempre
+# tienen versión compatible con el Python del entorno de despliegue.
