@@ -33,6 +33,18 @@ MODO_DEPURACION = str(st.secrets.get("MODO_DEPURACION", "")).lower() in (
     "true", "1", "si", "sí",
 )
 
+# Proveedor del modelo. "anthropic" es producción. "mistral" es preproducción a
+# coste cero: sirve para comprobar que los cambios de código funcionan, NUNCA
+# para valorar un contrato — los prompts están calibrados contra Claude.
+PROVEEDOR = str(st.secrets.get("PROVEEDOR", "anthropic")).strip().lower()
+if PROVEEDOR not in ("anthropic", "mistral"):
+    PROVEEDOR = "anthropic"
+
+CLAVE_API_POR_PROVEEDOR = {
+    "anthropic": "ANTHROPIC_API_KEY",
+    "mistral": "MISTRAL_API_KEY",
+}
+
 TEXTO_CASILLA = (
     "Confirmo que este documento no está sujeto a un acuerdo de confidencialidad "
     "y no contiene datos personales."
@@ -141,6 +153,22 @@ def pantalla_informe():
     resultado = st.session_state.resultado
     agregado = resultado["agregado"]
 
+    if resultado.get("proveedor") == "mistral":
+        st.warning(
+            "🧪 **Informe de PREPRODUCCIÓN — no válido para valorar un contrato.** "
+            "Generado con la API gratuita de Mistral para comprobar que la "
+            "aplicación funciona. Los prompts y el manual están calibrados "
+            "contra Claude: las clasificaciones, el score y los vetos de este "
+            "informe no son fiables. Sirve para revisar que el circuito corre y "
+            "que la pantalla pinta lo que debe, nada más."
+        )
+
+    if resultado.get("informe_truncado"):
+        st.warning(
+            "⚠️ El informe ha llegado incompleto (el modelo alcanzó su límite "
+            "de longitud). Se muestra igualmente porque estás en preproducción."
+        )
+
     # El score, el semáforo y los vetos los calcula ÚNICAMENTE la aplicación
     # (nunca el modelo): una sola fuente de verdad, mostrada aquí de forma
     # nativa para que no dependa de cómo lo transcriba el HTML del informe.
@@ -162,25 +190,40 @@ def pantalla_informe():
     )
 
     if consumo:
+        def _n(valor):
+            """Miles con punto, al modo español."""
+            return f"{valor:,}".replace(",", ".")
+
         with st.expander("Detalle del consumo"):
             for fila in consumo["por_fase"]:
+                entrada = f"{_n(fila['entrada'])} nuevos"
+                if fila["cache_lectura"]:
+                    entrada += f" + {_n(fila['cache_lectura'])} desde caché"
+                if fila["cache_escritura"]:
+                    entrada += f" + {_n(fila['cache_escritura'])} escritos en caché"
                 st.markdown(
-                    f"- **{fila['nombre']}** · {fila['llamadas']} "
-                    f"{'llamada' if fila['llamadas'] == 1 else 'llamadas'} · "
-                    f"{fila['modelo']} · {fila['salida']:,} tokens generados · "
-                    f"**{fila['coste_usd']:.3f} $**".replace(",", ".")
+                    f"**{fila['nombre']}** — {fila['llamadas']} "
+                    f"{'llamada' if fila['llamadas'] == 1 else 'llamadas'} · {fila['modelo']}  \n"
+                    f"Entrada: {entrada} → {fila['coste_entrada_usd']:.3f} $  \n"
+                    f"Generados: {_n(fila['salida'])} → {fila['coste_salida_usd']:.3f} $  \n"
+                    f"Subtotal: **{fila['coste_usd']:.3f} $**"
                 )
+            st.markdown("---")
             st.markdown(
-                f"\n**Total: {consumo['coste_total_usd']:.2f} $** "
-                f"({consumo['n_llamadas']} llamadas · "
-                f"{consumo['tokens_salida']:,} tokens generados)".replace(",", ".")
+                f"**Total: {consumo['coste_total_usd']:.2f} $** "
+                f"({consumo['n_llamadas']} llamadas)  \n"
+                f"Texto enviado (entrada): {consumo['coste_entrada_usd']:.2f} $ · "
+                f"Texto generado (salida): {consumo['coste_salida_usd']:.2f} $ "
+                f"— **{consumo['pct_salida']} % del total**  \n"
+                f"El texto generado se factura a una tarifa cinco veces mayor "
+                f"que el enviado."
             )
             if consumo["cache_lectura"]:
                 st.markdown(
                     f"El manual y el contrato se reutilizaron desde la caché "
-                    f"({consumo['cache_lectura']:,} tokens leídos), lo que ha "
-                    f"ahorrado unos **{consumo['ahorro_cache_usd']:.2f} $** "
-                    "respecto a enviarlos completos en cada llamada.".replace(",", ".")
+                    f"({_n(consumo['cache_lectura'])} tokens leídos a una décima "
+                    f"parte de tarifa): unos **{consumo['ahorro_cache_usd']:.2f} $** "
+                    "menos que enviarlos completos en cada llamada."
                 )
             st.caption(
                 "Estimación calculada sobre los tokens realmente consumidos y "
@@ -285,11 +328,12 @@ def pantalla_subida():
         st.error(f"El tamaño total no puede superar {MAX_MB_TOTAL} MB.")
         return
 
-    api_key = st.secrets.get("ANTHROPIC_API_KEY", "")
+    nombre_clave = CLAVE_API_POR_PROVEEDOR[PROVEEDOR]
+    api_key = st.secrets.get(nombre_clave, "")
     if not api_key:
         st.error(
             "No hemos podido completar el análisis. Inténtalo más tarde. "
-            "(Configuración: falta ANTHROPIC_API_KEY en los Secrets.)"
+            f"(Configuración: falta {nombre_clave} en los Secrets.)"
         )
         return
 
@@ -314,7 +358,9 @@ def pantalla_subida():
             contrato = normalizar_documentos([(f.name, f.getvalue()) for f in ficheros])
             manual = _cargar_manual()
 
-            resultado = ejecutar_analisis(contrato, manual, api_key, progreso)
+            resultado = ejecutar_analisis(
+                contrato, manual, api_key, progreso, proveedor=PROVEEDOR
+            )
 
             st.session_state.resultado = resultado
             st.session_state.analisis_realizados += 1
