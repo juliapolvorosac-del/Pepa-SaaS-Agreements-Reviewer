@@ -152,10 +152,14 @@ def _duracion(segundos) -> str:
 
 
 def _cargar_manual() -> str:
-    # Ruta relativa al fichero (necesario en Streamlit Cloud) y nombre en
-    # minúsculas (Linux distingue mayúsculas).
     ruta = Path(__file__).parent / "manual.txt"
-    return ruta.read_text(encoding="utf-8")
+    texto = ruta.read_text(encoding="utf-8")
+    if texto.count("POSICIÓN MÍNIMA ACEPTABLE") < 30:
+        raise RuntimeError(
+            "manual.txt no parece el manual de revisión: faltan los bloques "
+            "de posiciones. Revisa que el fichero subido sea el correcto."
+        )
+    return texto
 
 
 # ---------------------------------------------------------------------------
