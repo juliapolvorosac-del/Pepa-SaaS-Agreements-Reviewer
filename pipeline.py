@@ -55,12 +55,16 @@ from prompts import (
 
 CONFIG_PROVEEDOR = {
     "anthropic": {
-        # Las tres fases con Sonnet 5. Para devolver el análisis jurídico a
-        # Opus 5 —que es donde se nota, en la fase 1— basta con cambiar la
-        # línea de "modulos" por "claude-opus-5".
+        # El triaje (extracción de hechos) y el informe (que tiene prohibido
+        # reinterpretar) van con Sonnet 5. La fase 1 se queda en Opus 5: la
+        # prueba del 28/08/2026 con Sonnet en las tres fases ahorró solo un 13 %
+        # y perdió tres contradicciones entre cláusulas distantes que Opus sí
+        # detecta (la indemnización de PI engullida por el cap, la cl. 7.2
+        # vaciando las medidas de seguridad, y la sección 6 fuera de la lista de
+        # supervivencia). Marcó además 20 cláusulas conformes frente a 5.
         "modelos": {
             "triaje": "claude-sonnet-5",
-            "modulos": "claude-sonnet-5",
+            "modulos": "claude-opus-5",
             "informe": "claude-sonnet-5",
         },
         # El razonamiento interno son tokens de salida: se pagan y se esperan.
@@ -69,7 +73,11 @@ CONFIG_PROVEEDOR = {
         "esfuerzo": {"triaje": "medium", "modulos": "high", "informe": "medium"},
         # El informe (67 cláusulas + redlines) puede ser enorme: se usa el
         # máximo de salida que admite el modelo, en streaming.
-        "max_tokens": {"triaje": 16000, "modulos": 32000, "informe": 128000},
+        # `max_tokens` es un TECHO, no un presupuesto: solo se paga lo que se
+        # genera. Se deja holgado porque un módulo truncado se pierde entero y
+        # además consume el doble al reintentarse. M7 (11 cláusulas más el
+        # bloque reforzado del cap) es el que más se acerca al límite.
+        "max_tokens": {"triaje": 16000, "modulos": 64000, "informe": 128000},
         "cache": True,
         "paralelo": True,
         "pausa_entre_llamadas": 0,
