@@ -2,7 +2,8 @@
 """Pipeline de revisión: Fase 0 (triaje) → Fase 1 (módulos en paralelo) → Fase 2 (informe).
 
 Detalles de API que respeta este módulo (briefing §3):
-- Modelo `claude-opus-5` (obligatorio, no hay modelo por defecto).
+- El modelo es obligatorio en cada llamada: no hay modelo por defecto. Cuál se
+  usa en cada fase se decide en CONFIG_PROVEEDOR, más abajo.
 - No se fija `temperature`: en Opus 5 el thinking adaptativo está activo por
   defecto y los parámetros de sampling ya no se admiten.
 - Prompt caching: el manual y el contrato se marcan como bloques cacheables y
@@ -70,7 +71,9 @@ CONFIG_PROVEEDOR = {
         # El razonamiento interno son tokens de salida: se pagan y se esperan.
         # Se reduce solo donde no hay juicio jurídico. La fase 1 —el análisis
         # contra el manual— se mantiene en "high".
-        "esfuerzo": {"triaje": "medium", "modulos": "high", "informe": "medium"},
+        # Dos ajustes independientes: "modelos" dice QUÉ modelo analiza y
+        # "esfuerzo" cuánto razona. Cambiar uno no cambia el otro.
+        "esfuerzo": {"triaje": "medium", "modulos": "medium", "informe": "medium"},
         # El informe (67 cláusulas + redlines) puede ser enorme: se usa el
         # máximo de salida que admite el modelo, en streaming.
         # `max_tokens` es un TECHO, no un presupuesto: solo se paga lo que se
