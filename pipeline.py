@@ -16,6 +16,8 @@ import json
 import re
 import threading
 import time
+import urllib.error
+import urllib.request
 from collections import namedtuple
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -266,42 +268,50 @@ class ErrorProveedorNoDisponible(Exception):
 
 
 class ClienteMistral:
-    """Cliente mínimo para la API de Mistral por HTTP directo.
+    """Cliente mínimo para la API de Mistral, construido sobre `urllib`.
 
-    No se usa el SDK `mistralai` a propósito: sus dependencias no siempre tienen
-    versión compatible con la que use el entorno de despliegue, y una
-    instalación fallida deja el paquete inservible. La API de Mistral es un
-    simple POST con formato estilo OpenAI, e `httpx` ya viene instalado como
-    dependencia del SDK de Anthropic. Así preproducción no puede romperse por un
-    problema de empaquetado.
+    Preproducción no debe poder romperse por un problema de empaquetado, así que
+    aquí no se depende de NADA externo: `urllib` forma parte de la biblioteca
+    estándar de Python. Ni el SDK `mistralai` (cuyas dependencias no siempre
+    tienen versión compatible con el Python del entorno de despliegue) ni
+    `httpx`. La API de Mistral es un POST con formato estilo OpenAI y eso se
+    resuelve con la librería estándar sin dificultad.
     """
 
     URL = "https://api.mistral.ai/v1/chat/completions"
 
     def __init__(self, api_key: str, timeout: float = 600.0):
-        import httpx
-
-        self._httpx = httpx
-        self.cliente = httpx.Client(
-            timeout=timeout,
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            },
-        )
+        self.api_key = api_key
+        self.timeout = timeout
 
     def completar(self, modelo: str, mensajes: list, max_tokens: int) -> dict:
-        cuerpo = {"model": modelo, "messages": mensajes, "max_tokens": max_tokens}
+        cuerpo = json.dumps(
+            {"model": modelo, "messages": mensajes, "max_tokens": max_tokens}
+        ).encode("utf-8")
+
         for intento in range(3):
-            respuesta = self.cliente.post(self.URL, json=cuerpo)
-            # 429 = límite de peticiones del plan gratuito. Se espera y reintenta.
-            if respuesta.status_code == 429 and intento < 2:
-                time.sleep(3 * (intento + 1))
-                continue
-            respuesta.raise_for_status()
-            return respuesta.json()
-        respuesta.raise_for_status()
-        return respuesta.json()
+            peticion = urllib.request.Request(
+                self.URL,
+                data=cuerpo,
+                method="POST",
+                headers={
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                },
+            )
+            try:
+                with urllib.request.urlopen(peticion, timeout=self.timeout) as r:
+                    return json.loads(r.read().decode("utf-8"))
+            except urllib.error.HTTPError as e:
+                # 429 = límite de peticiones del plan gratuito. Se espera y
+                # se reintenta; el resto de errores se propagan con su detalle.
+                if e.code == 429 and intento < 2:
+                    time.sleep(3 * (intento + 1))
+                    continue
+                detalle = e.read().decode("utf-8", errors="replace")[:500]
+                raise RuntimeError(f"Mistral devolvió HTTP {e.code}: {detalle}") from e
+        raise RuntimeError("Mistral: límite de peticiones superado tras 3 intentos")
 
 
 def _crear_cliente(api_key: str, proveedor: str):
