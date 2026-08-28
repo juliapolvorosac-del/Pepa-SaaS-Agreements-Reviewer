@@ -261,11 +261,21 @@ class ErrorSaldoInsuficiente(Exception):
     es un problema de facturación del titular de la clave API."""
 
 
+class ErrorProveedorNoDisponible(Exception):
+    """El paquete del proveedor seleccionado no está instalado en el entorno."""
+
+
 def _crear_cliente(api_key: str, proveedor: str):
     if proveedor == "mistral":
         # Import perezoso: si no se usa Mistral, no hace falta el paquete.
-        from mistralai import Mistral
-
+        try:
+            from mistralai import Mistral
+        except ImportError as e:
+            raise ErrorProveedorNoDisponible(
+                "El paquete 'mistralai' (versión 1.0 o superior) no está "
+                "instalado en el entorno. Comprueba que requirements.txt lo "
+                "incluye y fuerza una reinstalación de dependencias."
+            ) from e
         return Mistral(api_key=api_key)
     return anthropic.Anthropic(api_key=api_key, max_retries=3)
 
@@ -739,9 +749,12 @@ def ejecutar_analisis(contrato: str, manual: str, api_key: str, progreso=None,
     cfg = config(proveedor)
     cliente = _crear_cliente(api_key, proveedor)
     contador = ContadorUso()
+    tiempos = {}
+    inicio_total = time.monotonic()
 
     if progreso:
         progreso("triaje", 0, 0)
+    marca = time.monotonic()
     if cfg["cache"]:
         # El precalentamiento de caché no depende del triaje (solo necesita el
         # manual y el contrato), así que se lanza en paralelo con la fase 0 en
@@ -754,15 +767,18 @@ def ejecutar_analisis(contrato: str, manual: str, api_key: str, progreso=None,
             futuro_cache.result()
     else:
         fase0 = fase_0(cliente, contrato, contador, proveedor)
+    tiempos["triaje"] = time.monotonic() - marca
 
     def progreso_modulos(actual, total):
         if progreso:
             progreso("modulos", actual, total)
 
+    marca = time.monotonic()
     resultados, incidencias, _ = fase_1(
         cliente, fase0, manual, contrato, progreso_modulos,
         cache_precalentada=True, contador=contador, proveedor=proveedor,
     )
+    tiempos["modulos"] = time.monotonic() - marca
 
     if not resultados:
         raise ErrorTriaje(codigo="version_manual_no_coincide", detalle="ningún módulo devolvió resultados")
@@ -771,9 +787,12 @@ def ejecutar_analisis(contrato: str, manual: str, api_key: str, progreso=None,
 
     if progreso:
         progreso("informe", 0, 0)
+    marca = time.monotonic()
     html, informe_truncado = fase_2(
         cliente, fase0, resultados, incidencias, agregado, contador, proveedor
     )
+    tiempos["informe"] = time.monotonic() - marca
+    tiempos["total"] = time.monotonic() - inicio_total
 
     return {
         "fase0": fase0,
@@ -783,6 +802,7 @@ def ejecutar_analisis(contrato: str, manual: str, api_key: str, progreso=None,
         "agregado": agregado,
         "aviso_transcripcion": verificar_transcripcion(agregado, html),
         "consumo": contador.resumen(),
+        "tiempos": tiempos,
         "proveedor": proveedor,
         "informe_truncado": informe_truncado,
     }
