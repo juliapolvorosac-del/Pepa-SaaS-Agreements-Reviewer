@@ -1,4 +1,4 @@
-# Pepa-SaaS-Agreements-Reviewer - Revisor de Contratos de Provisión de Servicios SaaS
+# Pepa-SaaS-Agreements-Reviewer - Revisor de Contratos SaaS
 
 Aplicación web que analiza contratos SaaS desde la posición de la **parte adquirente** y genera un informe de asistencia a la revisión jurídica: puntuación de riesgo ponderada, análisis cláusula por cláusula contra un manual de criterios propio y propuestas de redacción alternativa (*redlines*) listas para negociar.
 
@@ -6,7 +6,7 @@ Proyecto educativo desarrollado por **Julia Polvorosa Cáceres**, abogada in-hou
 
 ## Qué hace
 
-1. **Triaje** — comprueba que el documento es un contrato SaaS legible y en ámbito, identifica partes, ley aplicable y jurisdicción, y determina el nivel de exigencia aplicable según el valor y la criticidad del contrato.
+1. **Triaje** — comprueba que el documento es un contrato SaaS legible y en ámbito de aplicación, identifica partes, ley aplicable y jurisdicción, y determina el nivel de exigencia aplicable según el valor y la criticidad del contrato.
 2. **Revisión por módulos** — evalúa 67 cláusulas organizadas en 7 módulos (condiciones comerciales, propiedad intelectual y datos, responsabilidad, duración y terminación, RGPD, Reglamento de IA y un módulo específico para proveedores estadounidenses), en llamadas paralelas a la API de Claude.
 3. **Informe** — consolida los resultados en un informe HTML autónomo con veredicto, semáforo de riesgo, estado de las 13 cláusulas de veto y propuestas de redacción. La aplicación recalcula el score de forma independiente en código y avisa si detecta discrepancias.
 
@@ -27,7 +27,7 @@ El análisis se realiza contra un manual de revisión jurídica propio (derecho 
 
 ## Aviso legal
 
-El resultado generado por esta herramienta es un análisis preparatorio de asistencia a la revisión jurídica. **No sustituye la revisión por un abogado cualificado y no constituye asesoramiento jurídico.**
+El resultado generado por esta herramienta es un análisis preparatorio de asistencia a la revisión jurídica. **No sustituye a la revisión por un abogado cualificado y no constituye asesoramiento jurídico.**
 
 ## Propiedad intelectual
 
