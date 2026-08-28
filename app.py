@@ -84,7 +84,10 @@ st.set_page_config(
 st.markdown(
     """
     <style>
-    /* ---------- Fondo y tipografía generales ---------- */
+    /* ---------- Fondo y tipografía generales ----------
+       Solo se usan los tres colores de marca. Donde hace falta jerarquía
+       (textos secundarios, elementos deshabilitados) se recurre a la
+       transparencia del índigo, no a un color nuevo. */
     .stApp,
     [data-testid="stAppViewContainer"],
     [data-testid="stMain"] {
@@ -92,26 +95,79 @@ st.markdown(
     }
     [data-testid="stHeader"] { background: transparent; }
 
-    .stApp, .stApp p, .stApp li, .stApp label, .stApp span, .stApp div,
-    .stApp h1, .stApp h2, .stApp h3, .stApp h4, .stApp h5 {
+    /* Todo el texto de la zona principal en índigo, nunca en negro */
+    [data-testid="stMain"], [data-testid="stMain"] * {
         color: #2F2E48;
     }
     [data-testid="stCaptionContainer"], [data-testid="stCaptionContainer"] * {
-        color: #5F5D80 !important;
+        color: rgba(47, 46, 72, 0.72) !important;
     }
 
-    /* ---------- Barra lateral ---------- */
+    /* ---------- Barra lateral: fija, sin desplazamiento ---------- */
     [data-testid="stSidebar"],
-    [data-testid="stSidebarContent"] {
+    [data-testid="stSidebarContent"],
+    [data-testid="stSidebarUserContent"] {
         background-color: #2F2E48 !important;
     }
-    [data-testid="stSidebar"] * {
+    /* Todo el texto de la barra lateral en blanco cálido, enlaces incluidos */
+    [data-testid="stSidebar"] *,
+    [data-testid="stSidebar"] a,
+    [data-testid="stSidebar"] a * {
         color: #F8F3F3 !important;
         text-align: center;
     }
-    [data-testid="stSidebar"] a {
-        color: #ABA8E8 !important;
+    [data-testid="stSidebar"] a { text-decoration: underline; }
+
+    /* Se oculta el control de plegado: la columna es siempre visible */
+    [data-testid="stSidebarCollapseButton"],
+    [data-testid="stSidebarCollapsedControl"],
+    [data-testid="collapsedControl"],
+    [data-testid="stSidebarHeader"] button,
+    [data-testid="stSidebarNavSeparator"] {
+        display: none !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stSidebarHeader"] {
+        padding-top: 0.5rem;
+        height: auto;
+    }
+
+    /* El contenido se reparte por toda la franja, de arriba abajo, en vez de
+       amontonarse en la cabecera. Se maqueta como una columna flexible de
+       altura completa para no depender de espaciados manuales. */
+    .lateral-pepa {
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        min-height: calc(100vh - 7rem);
+        padding: 0.5rem 0 1rem;
+    }
+    .lateral-pepa p {
+        margin: 0;
+        font-size: 0.95rem;
+        line-height: 1.5;
+    }
+    .lateral-pepa p.destacado {
+        font-size: 1rem;
+        font-weight: 700;
+        line-height: 1.45;
+    }
+    .lateral-pepa a {
+        color: #F8F3F3 !important;
         text-decoration: underline;
+    }
+    [data-testid="stSidebarUserContent"] {
+        padding-top: 1.4rem;
+    }
+
+    /* Anclada en pantallas de escritorio. Por debajo de 768 px se deja que
+       Streamlit la recoja, o el contenido taparía la aplicación en el móvil. */
+    @media (min-width: 768px) {
+        [data-testid="stSidebar"] {
+            min-width: 330px !important;
+            max-width: 330px !important;
+            transform: none !important;
+            visibility: visible !important;
+        }
     }
 
     /* ---------- Botones ---------- */
@@ -122,21 +178,16 @@ st.markdown(
         border-radius: 8px;
         font-weight: 600;
     }
-    .stButton > button:hover:enabled {
-        background-color: #45436B !important;
-        border-color: #45436B !important;
+    .stButton > button:hover:enabled,
+    .stButton > button:hover:enabled * {
+        background-color: rgba(47, 46, 72, 0.86) !important;
+        border-color: #2F2E48 !important;
         color: #F8F3F3 !important;
     }
     .stButton > button:disabled, .stButton > button:disabled * {
-        background-color: #DEDBEF !important;
-        border-color: #DEDBEF !important;
-        color: #8B88AB !important;
-    }
-    .stDownloadButton > button {
-        background-color: #FFFFFF !important;
-        color: #2F2E48 !important;
-        border: 1px solid #ABA8E8 !important;
-        border-radius: 8px;
+        background-color: #ABA8E8 !important;
+        border-color: #ABA8E8 !important;
+        color: rgba(47, 46, 72, 0.55) !important;
     }
 
     /* ---------- Barra de progreso ---------- */
@@ -145,12 +196,12 @@ st.markdown(
         background-color: #2F2E48 !important;
     }
     [data-testid="stProgress"] > div > div > div {
-        background-color: #DEDBEF !important;
+        background-color: #ABA8E8 !important;
     }
 
     /* ---------- Selector del nivel de exigencia ---------- */
     [role="radiogroup"] {
-        background: #FFFFFF;
+        background: rgba(171, 168, 232, 0.15);
         border: 1px solid #ABA8E8;
         border-radius: 10px;
         padding: 12px 16px;
@@ -165,7 +216,7 @@ st.markdown(
 
     /* ---------- Métricas del informe ---------- */
     [data-testid="stMetric"] {
-        background: #FFFFFF;
+        background: rgba(171, 168, 232, 0.15);
         border: 1px solid #ABA8E8;
         border-radius: 10px;
         padding: 14px 16px;
@@ -175,21 +226,18 @@ st.markdown(
         font-weight: 600;
     }
     [data-testid="stMetricLabel"], [data-testid="stMetricLabel"] * {
-        color: #5F5D80 !important;
+        color: rgba(47, 46, 72, 0.72) !important;
     }
 
     /* ---------- Zona de subida, desplegables y estado ---------- */
     [data-testid="stFileUploaderDropzone"] {
-        background-color: #EDEBF8 !important;
+        background-color: rgba(171, 168, 232, 0.15) !important;
         border: 1.5px dashed #ABA8E8 !important;
     }
     [data-testid="stExpander"] details, [data-testid="stExpander"] summary {
         border-color: #ABA8E8 !important;
         border-radius: 10px;
-        background: #FFFFFF;
-    }
-    [data-testid="stStatusWidget"], [data-testid="stStatusWidget"] * {
-        color: #2F2E48;
+        background: transparent;
     }
 
     /* ---------- Título ---------- */
@@ -206,6 +254,18 @@ st.markdown(
         width: 84px;
         margin: 0 auto 1.6em;
     }
+
+    /* ---------- Línea de vetos, bajo las métricas ---------- */
+    .vetos-pepa {
+        border: 1px solid #ABA8E8;
+        border-left: 5px solid #2F2E48;
+        border-radius: 8px;
+        padding: 12px 16px;
+        margin: 4px 0 14px;
+        font-size: 0.94rem;
+        color: #2F2E48;
+    }
+    .vetos-pepa strong { font-weight: 700; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -216,32 +276,31 @@ st.markdown(
 # Columna lateral — disclaimers (copy de la maqueta, tal cual)
 # ---------------------------------------------------------------------------
 with st.sidebar:
+    # Se maqueta en HTML directo para poder repartir los bloques por toda la
+    # altura de la franja: Streamlit los apilaría arriba dejando el resto vacío.
     st.markdown(
         """
-**Esta herramienta es un proyecto educativo de Julia Polvorosa Cáceres,
-abogada in-house. El resultado obtenido mediante el uso de la misma no
-sustituye el asesoramiento legal.**
+<div class="lateral-pepa">
+  <p class="destacado">Esta herramienta es un proyecto educativo de Julia
+  Polvorosa Cáceres, abogada in-house. El resultado obtenido mediante el uso
+  de la misma no sustituye al asesoramiento legal.</p>
 
-&nbsp;
+  <p>Esta herramienta utiliza inteligencia artificial mediante la API de
+  Claude. Al utilizar esta herramienta, aceptas los
+  <a href="https://www.anthropic.com/legal/commercial-terms">Commercial Terms
+  of Use</a> y el
+  <a href="https://www.anthropic.com/legal/data-processing-addendum">Data
+  Processing Addendum</a>.</p>
 
-Esta herramienta utiliza inteligencia artificial mediante la API de Claude.
-Al utilizar esta herramienta, aceptas los
-[Commercial Terms of Use](https://www.anthropic.com/legal/commercial-terms)
-y el
-[Data Processing Addendum](https://www.anthropic.com/legal/data-processing-addendum).
+  <p>Los datos introducidos en esta herramienta no serán utilizados para
+  entrenar modelos de inteligencia artificial.</p>
 
-&nbsp;
+  <p class="destacado">© Todos los derechos reservados</p>
 
-Los datos introducidos en esta herramienta no serán utilizados para entrenar
-modelos de inteligencia artificial.
-
-&nbsp;
-
-&nbsp;
-
-**© Todos los derechos reservados**
-Contacto: juliapolvorosac@gmail.com
-        """
+  <p>Contacto: juliapolvorosac@gmail.com</p>
+</div>
+        """,
+        unsafe_allow_html=True,
     )
 
 
@@ -290,22 +349,38 @@ def pantalla_informe():
     consumo = resultado.get("consumo")
     tiempos = resultado.get("tiempos") or {}
 
-    col1, col2, col3, col4, col5 = st.columns(5)
+    col1, col2, col3, col4 = st.columns(4)
     col1.metric(
         "Score (calculado por la aplicación)",
         f"{agregado['score_pct']} %" if agregado["score_pct"] is not None else "N/D",
     )
     col2.metric("Semáforo", agregado["semaforo"])
-    col3.metric("Vetos disparados", "Sí" if agregado["hay_veto_disparado"] else "No")
     if consumo:
-        col4.metric("Coste de la revisión", f"{consumo['coste_total_usd']:.2f} $")
+        col3.metric("Coste de la revisión", f"{consumo['coste_total_usd']:.2f} $")
     if tiempos.get("total"):
-        col5.metric("Duración", _duracion(tiempos["total"]))
+        col4.metric("Duración", _duracion(tiempos["total"]))
     st.caption(
         f"Σ peso×puntuación = {agregado['suma_ponderada']} · "
         f"Σ pesos = {agregado['suma_pesos']} · "
         f"{agregado['n_denominador']} cláusulas en el denominador."
     )
+
+    # Los vetos ya no van en una tarjeta estrecha: ocupan una línea entera bajo
+    # las métricas, donde caben los nombres de las cláusulas afectadas.
+    if agregado["hay_veto_disparado"]:
+        st.markdown(
+            "<div class='vetos-pepa'><strong>⛔ Vetos disparados:</strong> "
+            + " · ".join(agregado["vetos_disparados"])
+            + "</div>",
+            unsafe_allow_html=True,
+        )
+    else:
+        st.markdown(
+            "<div class='vetos-pepa'><strong>Vetos disparados:</strong> ninguno. "
+            "Ninguna de las trece cláusulas críticas del manual se sitúa en "
+            "posición rechazada.</div>",
+            unsafe_allow_html=True,
+        )
 
     if consumo:
         def _n(valor):
@@ -375,12 +450,6 @@ def pantalla_informe():
             "análisis (instrucciones de puntuación u órdenes de ignorar reglas). "
             "El análisis lo ha ignorado, pero revísalo con especial atención en "
             "el punto exacto indicado:\n\n" + texto
-        )
-
-    if agregado["hay_veto_disparado"]:
-        st.error(
-            "⛔ **Vetos disparados** (calculado por la aplicación): "
-            + " · ".join(agregado["vetos_disparados"])
         )
 
     if resultado["aviso_transcripcion"]:
