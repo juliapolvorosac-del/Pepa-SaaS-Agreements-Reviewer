@@ -65,27 +65,146 @@ MENSAJES_ERROR = {
 }
 
 st.set_page_config(
-    page_title="Revisor de contratos SaaS",
+    page_title="PEPA. Revisor de Contratos SaaS",
     page_icon="⚖️",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
-# Columna lateral fija azul oscuro con los disclaimers (maqueta). En móvil,
-# Streamlit la colapsa en un desplegable de forma nativa.
+# --- Tema de marca -----------------------------------------------------------
+# Todo el tema vive aquí, en CSS, para no depender de un fichero de
+# configuración aparte. Colores:
+#   #F8F3F3  blanco cálido → fondo
+#   #2F2E48  índigo        → texto, barra lateral, botones y barra de progreso
+#   #ABA8E8  malva claro   → bordes, acentos y enlaces sobre fondo oscuro
+#
+# El malva es un color CLARO: sobre el fondo blanco no tiene contraste
+# suficiente para texto, así que nunca se usa para leer, solo para delimitar.
+# El texto va siempre índigo sobre claro, o blanco cálido sobre índigo.
 st.markdown(
     """
     <style>
-    [data-testid="stSidebar"] {
-        background-color: #262346;
+    /* ---------- Fondo y tipografía generales ---------- */
+    .stApp,
+    [data-testid="stAppViewContainer"],
+    [data-testid="stMain"] {
+        background-color: #F8F3F3;
+    }
+    [data-testid="stHeader"] { background: transparent; }
+
+    .stApp, .stApp p, .stApp li, .stApp label, .stApp span, .stApp div,
+    .stApp h1, .stApp h2, .stApp h3, .stApp h4, .stApp h5 {
+        color: #2F2E48;
+    }
+    [data-testid="stCaptionContainer"], [data-testid="stCaptionContainer"] * {
+        color: #5F5D80 !important;
+    }
+
+    /* ---------- Barra lateral ---------- */
+    [data-testid="stSidebar"],
+    [data-testid="stSidebarContent"] {
+        background-color: #2F2E48 !important;
     }
     [data-testid="stSidebar"] * {
-        color: #F2F0EB !important;
+        color: #F8F3F3 !important;
         text-align: center;
     }
     [data-testid="stSidebar"] a {
-        color: #F2F0EB !important;
+        color: #ABA8E8 !important;
         text-decoration: underline;
+    }
+
+    /* ---------- Botones ---------- */
+    .stButton > button, [data-testid="stBaseButton-primary"] {
+        background-color: #2F2E48 !important;
+        color: #F8F3F3 !important;
+        border: 1px solid #2F2E48 !important;
+        border-radius: 8px;
+        font-weight: 600;
+    }
+    .stButton > button:hover:enabled {
+        background-color: #45436B !important;
+        border-color: #45436B !important;
+        color: #F8F3F3 !important;
+    }
+    .stButton > button:disabled, .stButton > button:disabled * {
+        background-color: #DEDBEF !important;
+        border-color: #DEDBEF !important;
+        color: #8B88AB !important;
+    }
+    .stDownloadButton > button {
+        background-color: #FFFFFF !important;
+        color: #2F2E48 !important;
+        border: 1px solid #ABA8E8 !important;
+        border-radius: 8px;
+    }
+
+    /* ---------- Barra de progreso ---------- */
+    [data-testid="stProgress"] div[role="progressbar"] > div,
+    [data-testid="stProgress"] > div > div > div > div {
+        background-color: #2F2E48 !important;
+    }
+    [data-testid="stProgress"] > div > div > div {
+        background-color: #DEDBEF !important;
+    }
+
+    /* ---------- Selector del nivel de exigencia ---------- */
+    [role="radiogroup"] {
+        background: #FFFFFF;
+        border: 1px solid #ABA8E8;
+        border-radius: 10px;
+        padding: 12px 16px;
+    }
+    [role="radiogroup"] [data-baseweb="radio"] div[aria-checked="true"],
+    [role="radiogroup"] [data-baseweb="radio"] > div:first-child {
+        border-color: #2F2E48 !important;
+    }
+    [role="radiogroup"] [data-baseweb="radio"] div[aria-checked="true"] {
+        background-color: #2F2E48 !important;
+    }
+
+    /* ---------- Métricas del informe ---------- */
+    [data-testid="stMetric"] {
+        background: #FFFFFF;
+        border: 1px solid #ABA8E8;
+        border-radius: 10px;
+        padding: 14px 16px;
+    }
+    [data-testid="stMetricValue"], [data-testid="stMetricValue"] * {
+        color: #2F2E48 !important;
+        font-weight: 600;
+    }
+    [data-testid="stMetricLabel"], [data-testid="stMetricLabel"] * {
+        color: #5F5D80 !important;
+    }
+
+    /* ---------- Zona de subida, desplegables y estado ---------- */
+    [data-testid="stFileUploaderDropzone"] {
+        background-color: #EDEBF8 !important;
+        border: 1.5px dashed #ABA8E8 !important;
+    }
+    [data-testid="stExpander"] details, [data-testid="stExpander"] summary {
+        border-color: #ABA8E8 !important;
+        border-radius: 10px;
+        background: #FFFFFF;
+    }
+    [data-testid="stStatusWidget"], [data-testid="stStatusWidget"] * {
+        color: #2F2E48;
+    }
+
+    /* ---------- Título ---------- */
+    .titulo-pepa {
+        text-align: center;
+        color: #2F2E48;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+        margin: 0.2em 0 0.1em;
+    }
+    .regla-pepa {
+        border: none;
+        border-top: 2px solid #ABA8E8;
+        width: 84px;
+        margin: 0 auto 1.6em;
     }
     </style>
     """,
@@ -114,18 +233,14 @@ y el
 &nbsp;
 
 Los datos introducidos en esta herramienta no serán utilizados para entrenar
-modelos de inteligencia artificial. Todos los datos de entrada y de salida
-serán eliminados por Anthropic de sus servidores a los 30 días, si bien se
-recomienda no introducir información confidencial o datos de carácter
-personal.
+modelos de inteligencia artificial.
 
 &nbsp;
 
 &nbsp;
 
 **© Todos los derechos reservados**
-Contacto: Puedes ponerte en contacto conmigo mediante un email a
-juliapolvorosac@gmail.com
+Contacto: juliapolvorosac@gmail.com
         """
     )
 
@@ -163,20 +278,10 @@ def pantalla_informe():
     resultado = st.session_state.resultado
     agregado = resultado["agregado"]
 
-    if resultado.get("proveedor") == "mistral":
-        st.warning(
-            "🧪 **Informe de PREPRODUCCIÓN — no válido para valorar un contrato.** "
-            "Generado con la API gratuita de Mistral para comprobar que la "
-            "aplicación funciona. Los prompts y el manual están calibrados "
-            "contra Claude: las clasificaciones, el score y los vetos de este "
-            "informe no son fiables. Sirve para revisar que el circuito corre y "
-            "que la pantalla pinta lo que debe, nada más."
-        )
-
     if resultado.get("informe_truncado"):
         st.warning(
-            "⚠️ El informe ha llegado incompleto (el modelo alcanzó su límite "
-            "de longitud). Se muestra igualmente porque estás en preproducción."
+            "⚠️ El informe ha llegado incompleto: se ha alcanzado el límite de "
+            "longitud antes de terminarlo. Revísalo con esa cautela."
         )
 
     # El score, el semáforo y los vetos los calcula ÚNICAMENTE la aplicación
@@ -304,10 +409,9 @@ def pantalla_informe():
 # Pantalla 1 — Subida  (+ Pantalla 2 — Procesando, en el mismo flujo)
 # ---------------------------------------------------------------------------
 def pantalla_subida():
-    # Copy de la maqueta, tal cual.
     st.markdown(
-        "<h2 style='text-align: center;'>Revisor de Contratos de Provisión "
-        "de Servicios SaaS</h2>",
+        "<h2 class='titulo-pepa'>PEPA. Revisor de Contratos SaaS</h2>"
+        "<hr class='regla-pepa'>",
         unsafe_allow_html=True,
     )
     st.markdown(
@@ -388,22 +492,30 @@ def pantalla_subida():
     inicio = time.monotonic()
 
     with st.status("Preparando el análisis…", expanded=True) as estado:
+        barra = st.progress(0)
+
+        def _avance(pct, texto):
+            """El reloj y el porcentaje avanzan en cada cambio de fase y cada
+            vez que termina un módulo: es la señal de que el análisis sigue vivo."""
+            barra.progress(pct)
+            estado.update(
+                label=f"{texto} · ⏱ {_duracion(time.monotonic() - inicio)} · {pct} %"
+            )
 
         def progreso(etapa, actual, total):
-            # El reloj avanza en cada cambio de fase y cada vez que termina un
-            # módulo: es la señal de que el análisis sigue vivo durante la espera.
-            reloj = f" · ⏱ {_duracion(time.monotonic() - inicio)}"
+            # El avance se reparte en proporción a lo que tarda cada fase: el
+            # triaje es corto, la revisión por módulos se lleva el grueso y el
+            # informe ocupa el tramo final.
             if etapa == "triaje":
-                estado.update(label="Analizando el documento…" + reloj)
+                _avance(4, "Analizando el documento")
             elif etapa == "modulos":
-                estado.update(
-                    label=f"Revisando cláusulas ({actual} de {total})…" + reloj
-                )
+                pct = 12 + int(70 * actual / total) if total else 12
+                _avance(pct, f"Revisando cláusulas ({actual} de {total})")
             elif etapa == "informe":
-                estado.update(label="Preparando el informe…" + reloj)
+                _avance(84, "Preparando el informe")
 
         try:
-            estado.update(label="Leyendo los documentos…")
+            _avance(1, "Leyendo los documentos")
             contrato = normalizar_documentos([(f.name, f.getvalue()) for f in ficheros])
             manual = _cargar_manual()
 
@@ -414,9 +526,10 @@ def pantalla_subida():
 
             st.session_state.resultado = resultado
             st.session_state.analisis_realizados += 1
+            barra.progress(100)
             estado.update(
                 label="Análisis completado en "
-                + _duracion(time.monotonic() - inicio),
+                + _duracion(time.monotonic() - inicio) + " · 100 %",
                 state="complete",
             )
 
