@@ -13,7 +13,12 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 from extraccion import normalizar_documentos
-from pipeline import ErrorTriaje, ErrorTruncamiento, ejecutar_analisis
+from pipeline import (
+    ErrorSaldoInsuficiente,
+    ErrorTriaje,
+    ErrorTruncamiento,
+    ejecutar_analisis,
+)
 
 # --- Límites (briefing §8) --------------------------------------------------
 MAX_FICHEROS = 5
@@ -139,18 +144,49 @@ def pantalla_informe():
     # El score, el semáforo y los vetos los calcula ÚNICAMENTE la aplicación
     # (nunca el modelo): una sola fuente de verdad, mostrada aquí de forma
     # nativa para que no dependa de cómo lo transcriba el HTML del informe.
-    col1, col2, col3 = st.columns(3)
+    consumo = resultado.get("consumo")
+
+    col1, col2, col3, col4 = st.columns(4)
     col1.metric(
         "Score (calculado por la aplicación)",
         f"{agregado['score_pct']} %" if agregado["score_pct"] is not None else "N/D",
     )
     col2.metric("Semáforo", agregado["semaforo"])
     col3.metric("Vetos disparados", "Sí" if agregado["hay_veto_disparado"] else "No")
+    if consumo:
+        col4.metric("Coste de la revisión", f"{consumo['coste_total_usd']:.2f} $")
     st.caption(
         f"Σ peso×puntuación = {agregado['suma_ponderada']} · "
         f"Σ pesos = {agregado['suma_pesos']} · "
         f"{agregado['n_denominador']} cláusulas en el denominador."
     )
+
+    if consumo:
+        with st.expander("Detalle del consumo"):
+            for fila in consumo["por_fase"]:
+                st.markdown(
+                    f"- **{fila['nombre']}** · {fila['llamadas']} "
+                    f"{'llamada' if fila['llamadas'] == 1 else 'llamadas'} · "
+                    f"{fila['modelo']} · {fila['salida']:,} tokens generados · "
+                    f"**{fila['coste_usd']:.3f} $**".replace(",", ".")
+                )
+            st.markdown(
+                f"\n**Total: {consumo['coste_total_usd']:.2f} $** "
+                f"({consumo['n_llamadas']} llamadas · "
+                f"{consumo['tokens_salida']:,} tokens generados)".replace(",", ".")
+            )
+            if consumo["cache_lectura"]:
+                st.markdown(
+                    f"El manual y el contrato se reutilizaron desde la caché "
+                    f"({consumo['cache_lectura']:,} tokens leídos), lo que ha "
+                    f"ahorrado unos **{consumo['ahorro_cache_usd']:.2f} $** "
+                    "respecto a enviarlos completos en cada llamada.".replace(",", ".")
+                )
+            st.caption(
+                "Estimación calculada sobre los tokens realmente consumidos y "
+                "las tarifas públicas de Anthropic. El importe facturado puede "
+                "variar ligeramente."
+            )
 
     # Elementos que la app añade ENCIMA del HTML (briefing §7): el HTML del
     # informe no se toca ni se reestiliza.
@@ -300,6 +336,20 @@ def pantalla_subida():
                 mensaje_error = MENSAJES_ERROR.get(
                     e.codigo, MENSAJES_ERROR["version_manual_no_coincide"]
                 )
+        except ErrorSaldoInsuficiente:
+            estado.update(label="Análisis detenido", state="error")
+            detalle_tecnico = traceback.format_exc()
+            mensaje_error = (
+                "El servicio no está disponible en este momento por un problema "
+                "de configuración ajeno al documento. Vuelve a intentarlo más "
+                "tarde."
+                + (
+                    "\n\n**(Modo depuración: la cuenta de Anthropic se ha quedado "
+                    "sin saldo. Recarga en console.anthropic.com → Plans & Billing.)**"
+                    if MODO_DEPURACION
+                    else ""
+                )
+            )
         except ErrorTruncamiento:
             estado.update(label="Análisis detenido", state="error")
             detalle_tecnico = traceback.format_exc()
