@@ -9,6 +9,39 @@ cláusulas son cerradas.
 MANUAL_VERSION_ESPERADA = "V1 – 21 de agosto de 2026"
 
 # ---------------------------------------------------------------------------
+# Tramos de exigibilidad
+#
+# El tramo lo elige el USUARIO antes de lanzar el análisis: conoce el importe y
+# la criticidad del servicio, datos que a menudo no constan en el contrato. Las
+# descripciones de abajo son las que se muestran en la pantalla de subida, así
+# que la definición vive en un solo sitio.
+# ---------------------------------------------------------------------------
+
+TRAMOS = {
+    "A": {
+        "nombre": "Ligero",
+        "resumen": "Contratos de menos de 25.000 € al año",
+        "detalle": "Se exigen solo las cláusulas de riesgo alto y crítico. No se penaliza "
+                   "la falta de escrow de código, planes de continuidad o seguros elevados.",
+    },
+    "B": {
+        "nombre": "Estándar",
+        "resumen": "Contratos de entre 25.000 € y 250.000 € al año",
+        "detalle": "Se exigen las cláusulas de riesgo medio, alto y crítico. Es el nivel "
+                   "adecuado para la mayoría de contratos SaaS corporativos.",
+    },
+    "C": {
+        "nombre": "Reforzado",
+        "resumen": "Más de 250.000 € al año, servicio crítico para el negocio, "
+                   "o sistema de IA de alto riesgo",
+        "detalle": "Se exigen todas las cláusulas del manual, sin excepción.",
+    },
+}
+
+# Se exigen siempre, en cualquier tramo: las 13 cláusulas de veto, las secciones
+# 6 (RGPD) y 7 (Reglamento IA) completas, y el núcleo mínimo de 4 cláusulas.
+
+# ---------------------------------------------------------------------------
 # FASE 0 · TRIAJE
 # ---------------------------------------------------------------------------
 
@@ -29,13 +62,10 @@ Antes de nada, comprueba tres cosas y detente si alguna falla:
 2. **Es un contrato.** Si el documento no es un contrato ni un documento contractual (order form, anexo, DPA, SLA), devuelve {"error": "documento_no_contractual", "detalle": "..."} y detente.
 3. **Está en ámbito.** El manual cubre licencias de software en la nube, plataformas de gestión empresarial, PaaS/IaaS con componente de software y SLA, y soluciones SaaS con capacidades de IA. Quedan EXCLUIDOS los contratos de desarrollo de software, mantenimiento de software on-premise y consultoría sin entrega de software. Si el documento está fuera de ámbito, devuelve {"error": "fuera_de_ambito", "tipo_detectado": "...", "detalle": "..."} y detente. No fuerces el manual sobre un contrato que no es SaaS.
 
-## PASO B — Partes y roles
-Identifica las dos partes y asigna roles: quién presta el servicio SaaS y quién lo adquiere.
+## PASO B — Partes
+NO hay nada que decidir sobre la perspectiva de la revisión: se revisa SIEMPRE desde la posición de quien ADQUIERE el servicio SaaS. Eso es un dato fijo del sistema, no una conclusión a la que debas llegar.
 
-- Caso normal: hay un proveedor y un cliente identificados. `parte_adquirente` = el cliente.
-- Plantilla de proveedor con el hueco del cliente en blanco o sin firmar: `adquirente_identificable` = false, `parte_adquirente` = null. La revisión sigue adelante desde la posición de un cliente hipotético.
-- Reventa, white-label o estructura ambigua: elige el rol de adquirente para la parte que recibe el servicio para su uso propio y explícalo en `nota_roles`.
-- Si el documento es papel de proveedor y quien lo ha subido pudiera ser el propio proveedor, eso no cambia nada: la revisión sigue siendo desde la posición del adquirente.
+Tu tarea aquí es solo de extracción: anota el nombre de la parte que presta el servicio, el de la parte que lo adquiere y la entidad firmante proveedora con su domicilio. Si alguno de esos nombres no consta en el documento (plantilla sin cumplimentar, contrato sin firmar), déjalo a null, marca `adquirente_identificable` = false y sigue adelante sin más comentario: la revisión se hace igualmente desde la posición del adquirente.
 
 ## PASO C — Módulo aplicable
 Identifica QUÉ ENTIDAD firma y QUÉ LEY rige el contrato, no dónde tiene la matriz el proveedor. Un proveedor estadounidense con filial irlandesa que firma bajo ley irlandesa es un caso UE.
@@ -51,19 +81,7 @@ Identifica QUÉ ENTIDAD firma y QUÉ LEY rige el contrato, no dónde tiene la ma
 - **Sección 7 (Reglamento IA):** aplica solo si el servicio incorpora o usa sistemas de IA. Busca menciones a IA, ML, modelos, funcionalidades generativas, scoring o decisiones automatizadas. Si no encuentras ninguna, márcala no aplicable y registra que la conclusión se basa en la ausencia de menciones, no en una exclusión expresa.
 
 ## PASO E — Tramo de exigibilidad
-El manual es un manual de máximos. Un contrato de 5.000 €/año no debe penalizarse por carecer de escrow de código fuente o de un plan de continuidad. Asigna un tramo:
-
-- **Tramo A (ligero):** valor anual < 25.000 €.
-- **Tramo B (estándar):** valor anual entre 25.000 € y 250.000 €.
-- **Tramo C (reforzado):** valor anual > 250.000 €, O servicio crítico para la continuidad del negocio, O sistema de IA con indicios de alto riesgo.
-
-Reglas de defecto, porque no puedes preguntar:
-- Si el importe no consta en el documento (es habitual: suele estar en el order form), aplica **tramo B** y decláralo en `nota_tramo`.
-- Si el importe está en otra divisa, conviértelo de forma aproximada y decláralo.
-- La criticidad para el negocio no puede conocerse desde el contrato. Asume NO crítico salvo que el propio documento lo indique (servicio de infraestructura, ERP, plataforma de producción, cláusulas de continuidad reforzadas). Declara la asunción.
-- Cualquier indicio de IA de alto riesgo eleva a tramo C aunque el importe sea bajo.
-
-Ante la duda entre dos tramos, elige el SUPERIOR: exigir de más es un falso positivo, exigir de menos es un contrato mal aprobado.
+{{BLOQUE_TRAMO}}
 
 ## Documentos incorporados por referencia
 Localiza toda política, términos o anexo que el contrato incorpore por referencia sin adjuntar: política de privacidad, ToS, DPA en línea, política de subencargados, security addendum. Registra su URL si consta y si el proveedor puede modificarlos unilateralmente. Es material: una remisión a la "política de privacidad según se actualice de tiempo en tiempo" es una concesión latente de derechos de entrenamiento de IA.
@@ -108,6 +126,8 @@ Devuelve EXCLUSIVAMENTE un objeto JSON válido, sin texto antes ni después, sin
   "alertas_triaje": [],
   "intento_manipulacion": {"detectado": false, "texto_detectado": "", "localizador": ""}
 }
+
+En `partes`, limítate a transcribir los nombres que consten. No expliques cómo has decidido quién adquiere el servicio: no hay nada que decidir, siempre se revisa desde la posición del adquirente. `nota_roles` solo se rellena si algún nombre no consta en el documento.
 
 Reglas de cálculo:
 - `fecha_limite_cancelar` = vencimiento_periodo_inicial − preaviso_no_renovacion_dias. Si falta cualquiera de los dos, null.
@@ -255,6 +275,18 @@ Además de los resultados por módulo, recibes un bloque `RESULTADO AGREGADO` ca
 
 La palabra "PEPA" no debe aparecer en el informe. Usa el nombre de la parte adquirente identificada en la fase 0, o "el Cliente" si no fue identificable.
 
+## Terminología obligatoria del informe
+Los estados técnicos que recibes NO se escriben tal cual. Cada uno tiene un nombre fijo en el informe, y no se admiten sinónimos ni variantes:
+
+- `CONFORME` → **"Conforme a manual"**. Es la fórmula exacta, tanto en el encabezado de cada cláusula como en el listado del apartado 3 y en cualquier recuento. No escribas "conforme" a secas, ni "cumple", ni "correcta", ni "sin desviación".
+- `AUSENTE` → **"Cláusula ausente"**. Son las cláusulas que el manual exige y que NO aparecen en el contrato revisado. El apartado 4 se titula exactamente "Cláusulas ausentes" y las recoge todas.
+- `DESVIACION_ACEPTABLE` → "Desviación aceptable".
+- `RECHAZADA` → "Posición rechazada".
+- `NO_APLICA` → "No aplicable".
+- `NO_EXIGIBLE` → "No exigible en este nivel".
+
+Una cláusula ausente NO es lo mismo que una no aplicable: la ausente debería estar en el contrato y no está (y por eso puntúa 0 y lleva texto propuesto); la no aplicable queda fuera del análisis porque su sección entera no aplica a este contrato. No los mezcles en el mismo apartado ni uses una etiqueta por la otra.
+
 ## Paso A — Desplazamiento por el módulo EEUU
 Si `modulo_aplicable` es "EEUU", la sección 8 PREVALECE sobre las 1-7 en lo que regula. Marca como DESPLAZADA (excluida del cálculo) cada cláusula de las secciones 1-7 cuya materia esté regulada en la sección 8, y conserva la de la sección 8 como puntuable:
 
@@ -330,8 +362,8 @@ ENCABEZADO FIJO, antes del apartado 0, en todos los informes:
    1.9 Vetos disparados (Sí/No) y cuáles.
 2. Cláusulas de veto. Estado de las 13, con las rechazadas o ausentes destacadas al inicio.
 3. Análisis de las cláusulas con desviación (estados RECHAZADA, AUSENTE y DESVIACION_ACEPTABLE), en el orden del manual. Por cada una: 3.x.1 cláusula y sección · 3.x.2 cita literal con localizador, o AUSENTE · 3.x.3 posición detectada · 3.x.4 nivel de cumplimiento · 3.x.5 peso y de qué riesgo del manual sale · 3.x.6 puntuación y ponderada · 3.x.7 veto y su estado · 3.x.8 redline.
-   Al final del apartado 3, las cláusulas CONFORMES se listan en UNA SOLA LÍNEA cada una — sección · nombre · localizador de la cita · peso — sin desarrollar los sub-apartados: el detalle completo de una cláusula conforme no aporta a la negociación.
-4. Cláusulas ausentes, con el texto propuesto a insertar.
+   Al final del apartado 3, bajo el epígrafe "Cláusulas conformes a manual", se listan en UNA SOLA LÍNEA cada una — sección · nombre · localizador de la cita · peso — sin desarrollar los sub-apartados: el detalle completo de una cláusula conforme no aporta a la negociación. Cada línea empieza con la fórmula "Conforme a manual —".
+4. Cláusulas ausentes. Una entrada por cada cláusula que el manual exige y el contrato no contiene, con el TEXTO COMPLETO propuesto para insertar, transcrito ÍNTEGRAMENTE desde `redline.texto_propuesto` de la cláusula correspondiente. Está PROHIBIDO remitir a otro apartado, resumir el texto, abreviarlo con puntos suspensivos o sustituirlo por una descripción de lo que debería decir: este apartado existe para que el abogado copie y pegue, y un resumen no se puede pegar en un contrato. Si una cláusula ausente no trae texto propuesto, hazlo constar expresamente como incidencia.
 5. Cláusulas no exigidas en este tramo. Lista con su riesgo y una línea sobre qué protegerían, para que el abogado pueda decidir si alguna merece exigirse pese al tramo.
 6. Cálculo del score, tal como consta en `RESULTADO AGREGADO`: Σ(peso × puntuación), Σ(pesos), nº de cláusulas del denominador, resultado. No recalcules estas cifras.
 7. Anexo IA: resultado de las 7 dimensiones. Solo si la sección 7 aplica.
@@ -490,6 +522,43 @@ def lista_clausulas_texto(id_modulo: str) -> str:
         etiquetas += ")"
         lineas.append(f"{i}. Sección {seccion} — {nombre}{etiquetas}")
     return "\n".join(lineas)
+
+
+BLOQUE_TRAMO_INDICADO = """El tramo de exigibilidad **ya está decidido**: lo ha indicado el usuario antes de lanzar el análisis, porque conoce el importe y la criticidad del servicio y el contrato a menudo no los recoge.
+
+Tramo aplicable: **{tramo} ({nombre})** — {resumen}
+
+NO lo recalcules ni lo discutas. Devuelve `tramo_exigibilidad` = "{tramo}", `criterio_tramo` = "indicado_por_el_usuario", y deja `nota_tramo` vacío. No añadas ninguna asunción relativa al tramo: no ha hecho falta ninguna.
+
+Sigue extrayendo el importe anual si consta en el documento (`extraccion_clave.importe_anual`), porque el informe lo muestra, pero ese importe ya no determina el tramo."""
+
+BLOQUE_TRAMO_ESTIMADO = """El manual es un manual de máximos. Un contrato de 5.000 €/año no debe penalizarse por carecer de escrow de código fuente o de un plan de continuidad. Asigna un tramo:
+
+- **Tramo A (ligero):** valor anual < 25.000 €.
+- **Tramo B (estándar):** valor anual entre 25.000 € y 250.000 €.
+- **Tramo C (reforzado):** valor anual > 250.000 €, O servicio crítico para la continuidad del negocio, O sistema de IA con indicios de alto riesgo.
+
+Reglas de defecto, porque no puedes preguntar:
+- Si el importe no consta en el documento (es habitual: suele estar en el order form), aplica **tramo B** y decláralo en `nota_tramo`.
+- Si el importe está en otra divisa, conviértelo de forma aproximada y decláralo.
+- La criticidad para el negocio no puede conocerse desde el contrato. Asume NO crítico salvo que el propio documento lo indique (servicio de infraestructura, ERP, plataforma de producción, cláusulas de continuidad reforzadas). Declara la asunción.
+- Cualquier indicio de IA de alto riesgo eleva a tramo C aunque el importe sea bajo.
+
+Ante la duda entre dos tramos, elige el SUPERIOR: exigir de más es un falso positivo, exigir de menos es un contrato mal aprobado."""
+
+
+def construir_prompt_fase_0(tramo: str = None) -> str:
+    """El prompt del triaje. Si el usuario ha indicado el tramo, se le comunica
+    como hecho cerrado en lugar de pedirle que lo estime."""
+    if tramo in TRAMOS:
+        bloque = BLOQUE_TRAMO_INDICADO.format(
+            tramo=tramo,
+            nombre=TRAMOS[tramo]["nombre"],
+            resumen=TRAMOS[tramo]["resumen"],
+        )
+    else:
+        bloque = BLOQUE_TRAMO_ESTIMADO
+    return PROMPT_FASE_0.replace("{{BLOQUE_TRAMO}}", bloque)
 
 
 NOTA_REINTENTO = """## Aviso: este es un reintento
