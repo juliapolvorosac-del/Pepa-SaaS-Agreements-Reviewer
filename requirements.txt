@@ -1,4 +1,5 @@
 streamlit
 anthropic
+mistralai
 pdfplumber
 python-docx
