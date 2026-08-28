@@ -1,5 +1,8 @@
 streamlit
 anthropic
-mistralai
+# La clase Mistral existe a partir de la versión 1.0. En las 0.x el cliente se
+# llamaba MistralClient y vivía en otro sitio: sin fijar la versión, una
+# instalación antigua rompe la importación.
+mistralai>=1.0.0
 pdfplumber
 python-docx
