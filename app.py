@@ -131,20 +131,32 @@ st.markdown(
         height: auto;
     }
 
-    /* Párrafos compactos: el contenido cabe entero y no se desliza */
-    [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p {
-        margin: 0 0 0.85rem 0;
-        font-size: 0.82rem;
-        line-height: 1.4;
+    /* El contenido se reparte por toda la franja, de arriba abajo, en vez de
+       amontonarse en la cabecera. Se maqueta como una columna flexible de
+       altura completa para no depender de espaciados manuales. */
+    .lateral-pepa {
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        min-height: calc(100vh - 7rem);
+        padding: 0.5rem 0 1rem;
     }
-    [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p:last-child {
-        margin-bottom: 0;
+    .lateral-pepa p {
+        margin: 0;
+        font-size: 0.95rem;
+        line-height: 1.5;
+    }
+    .lateral-pepa p.destacado {
+        font-size: 1rem;
+        font-weight: 700;
+        line-height: 1.45;
+    }
+    .lateral-pepa a {
+        color: #F8F3F3 !important;
+        text-decoration: underline;
     }
     [data-testid="stSidebarUserContent"] {
-        padding-top: 1.6rem;
-    }
-    [data-testid="stSidebarUserContent"] > div > div {
-        gap: 0 !important;
+        padding-top: 1.4rem;
     }
 
     /* Anclada en pantallas de escritorio. Por debajo de 768 px se deja que
@@ -264,25 +276,31 @@ st.markdown(
 # Columna lateral — disclaimers (copy de la maqueta, tal cual)
 # ---------------------------------------------------------------------------
 with st.sidebar:
+    # Se maqueta en HTML directo para poder repartir los bloques por toda la
+    # altura de la franja: Streamlit los apilaría arriba dejando el resto vacío.
     st.markdown(
         """
-**Esta herramienta es un proyecto educativo de Julia Polvorosa Cáceres,
-abogada in-house. El resultado obtenido mediante el uso de la misma no
-sustituye el asesoramiento legal.**
+<div class="lateral-pepa">
+  <p class="destacado">Esta herramienta es un proyecto educativo de Julia
+  Polvorosa Cáceres, abogada in-house. El resultado obtenido mediante el uso
+  de la misma no sustituye al asesoramiento legal.</p>
 
-Esta herramienta utiliza inteligencia artificial mediante la API de Claude.
-Al utilizar esta herramienta, aceptas los
-[Commercial Terms of Use](https://www.anthropic.com/legal/commercial-terms)
-y el
-[Data Processing Addendum](https://www.anthropic.com/legal/data-processing-addendum).
+  <p>Esta herramienta utiliza inteligencia artificial mediante la API de
+  Claude. Al utilizar esta herramienta, aceptas los
+  <a href="https://www.anthropic.com/legal/commercial-terms">Commercial Terms
+  of Use</a> y el
+  <a href="https://www.anthropic.com/legal/data-processing-addendum">Data
+  Processing Addendum</a>.</p>
 
-Los datos introducidos en esta herramienta no serán utilizados para entrenar
-modelos de inteligencia artificial.
+  <p>Los datos introducidos en esta herramienta no serán utilizados para
+  entrenar modelos de inteligencia artificial.</p>
 
-**© Todos los derechos reservados**
+  <p class="destacado">© Todos los derechos reservados</p>
 
-Contacto: juliapolvorosac@gmail.com
-        """
+  <p>Contacto: juliapolvorosac@gmail.com</p>
+</div>
+        """,
+        unsafe_allow_html=True,
     )
 
 
