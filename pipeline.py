@@ -155,11 +155,13 @@ PRECIOS_USD_POR_MILLON = {
 MULT_ESCRITURA_CACHE = 1.25
 MULT_LECTURA_CACHE = 0.10
 
+# Nombres que ve el usuario en el desglose del consumo. La interfaz está en
+# inglés; el resto del código y los prompts, en español.
 NOMBRE_FASE = {
-    "triaje": "Fase 0 · Triaje",
-    "cache": "Precalentamiento de caché",
-    "modulos": "Fase 1 · Revisión por módulos",
-    "informe": "Fase 2 · Informe",
+    "triaje": "Phase 0 · Triage",
+    "cache": "Cache warm-up",
+    "modulos": "Phase 1 · Clause review",
+    "informe": "Phase 2 · Report",
 }
 
 
@@ -511,16 +513,22 @@ def _precalentar_cache(cliente, manual: str, contrato: str, contador=None,
     if not cfg["cache"]:
         return  # Mistral no tiene caché de prompts: no hay nada que precalentar.
 
-    # El caché es por modelo: el precalentamiento debe usar el MISMO modelo que
-    # las llamadas de la fase 1.
+    # El precalentamiento debe ser IDÉNTICO a las llamadas de la fase 1 en todo
+    # lo que identifica la petición: mismo modelo y mismo esfuerzo. Si difieren,
+    # los siete módulos vuelven a escribir el caché en vez de leerlo, y en vez
+    # de ahorrar se paga el manual ocho veces.
     modelo = cfg["modelos"]["modulos"]
+    esfuerzo = cfg["esfuerzo"].get("modulos")
 
     def _intento(max_tokens):
-        mensaje = cliente.messages.create(
-            model=modelo,
-            max_tokens=max_tokens,
-            messages=[{"role": "user", "content": _bloques_cacheados(manual, contrato)}],
-        )
+        kwargs = {
+            "model": modelo,
+            "max_tokens": max_tokens,
+            "messages": [{"role": "user", "content": _bloques_cacheados(manual, contrato)}],
+        }
+        if esfuerzo is not None:
+            kwargs["output_config"] = {"effort": esfuerzo}
+        mensaje = cliente.messages.create(**kwargs)
         uso = getattr(mensaje, "usage", None)
         if contador is not None and uso is not None:
             contador.registrar("cache", modelo, {
@@ -845,6 +853,10 @@ def ejecutar_analisis(contrato: str, manual: str, api_key: str, progreso=None,
             )
             fase0 = fase_0(cliente, contrato, contador, proveedor, tramo)
             futuro_cache.result()
+        # Margen para que la entrada del caché quede consolidada antes de que
+        # los siete módulos salgan a la vez. Sin él pueden llegar demasiado
+        # pronto y escribir cada uno su propia copia.
+        time.sleep(2)
     else:
         fase0 = fase_0(cliente, contrato, contador, proveedor, tramo)
     tiempos["triaje"] = time.monotonic() - marca
