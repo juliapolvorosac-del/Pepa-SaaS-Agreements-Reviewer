@@ -6,6 +6,8 @@ Privacidad (briefing §8): nada se persiste; los documentos se procesan en
 memoria, se envían únicamente a la API de Anthropic y se descartan.
 """
 
+import hmac
+import html
 import time
 import traceback
 from pathlib import Path
@@ -47,6 +49,14 @@ CLAVE_API_POR_PROVEEDOR = {
     "anthropic": "ANTHROPIC_API_KEY",
     "mistral": "MISTRAL_API_KEY",
 }
+
+# Contraseña de acceso. La app es pública en internet pero cada análisis se
+# paga con la clave API de la titular: sin esta barrera, cualquiera podría
+# agotar el saldo (el límite por sesión se esquiva recargando la página). Se
+# configura en los Secrets de Streamlit Cloud y se comparte solo con quien
+# deba probar la herramienta. Si falta en Secrets, la app queda cerrada:
+# mejor cerrada que abierta por accidente.
+CONTRASENA_ACCESO = str(st.secrets.get("CONTRASENA_ACCESO", ""))
 
 TRAMO_POR_DEFECTO = "B"
 
@@ -364,6 +374,8 @@ if "resultado" not in st.session_state:
     st.session_state.resultado = None
 if "analisis_realizados" not in st.session_state:
     st.session_state.analisis_realizados = 0
+if "autenticado" not in st.session_state:
+    st.session_state.autenticado = False
 
 
 def _duracion(segundos) -> str:
@@ -381,6 +393,34 @@ def _cargar_manual() -> str:
     # minúsculas (Linux distingue mayúsculas).
     ruta = Path(__file__).parent / "manual.txt"
     return ruta.read_text(encoding="utf-8")
+
+
+# ---------------------------------------------------------------------------
+# Pantalla 0 — Acceso
+# ---------------------------------------------------------------------------
+def pantalla_acceso():
+    st.markdown(
+        "<h2 class='titulo-pepa'>PEPA. SaaS Contract Reviewer</h2>"
+        "<hr class='regla-pepa'>",
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        "This is a private demo: every analysis makes real calls to the Claude "
+        "API, so access is limited to invited users. To request the password, "
+        "write to juliapolvorosac@gmail.com."
+    )
+    # Formulario para que Enter también envíe la contraseña.
+    with st.form("acceso"):
+        clave = st.text_input("Access password", type="password")
+        entrar = st.form_submit_button("Enter")
+    if entrar:
+        # compare_digest: comparación en tiempo constante, no filtra por
+        # tiempos de respuesta cuánto prefijo de la contraseña coincide.
+        if hmac.compare_digest(clave, CONTRASENA_ACCESO):
+            st.session_state.autenticado = True
+            st.rerun()
+        else:
+            st.error("Incorrect password.")
 
 
 # ---------------------------------------------------------------------------
@@ -421,9 +461,11 @@ def pantalla_informe():
     # Los vetos ya no van en una tarjeta estrecha: ocupan una línea entera bajo
     # las métricas, donde caben los nombres de las cláusulas afectadas.
     if agregado["hay_veto_disparado"]:
+        # Los nombres de las cláusulas vienen de la salida del modelo, que a su
+        # vez lee el contrato: se escapan antes de insertarlos en HTML.
         st.markdown(
             "<div class='vetos-pepa'><strong>⛔ Vetoes triggered:</strong> "
-            + " · ".join(agregado["vetos_disparados"])
+            + " · ".join(html.escape(v) for v in agregado["vetos_disparados"])
             + "</div>",
             unsafe_allow_html=True,
         )
@@ -531,6 +573,16 @@ def pantalla_informe():
             "clauses are not included in the analysis: "
             + " · ".join(resultado["incidencias_pipeline"])
         )
+
+    # El informe es un documento HTML autónomo: se ofrece descargarlo tal
+    # cual, para archivarlo en el expediente o compartirlo. Sin esto, el
+    # informe solo vive dentro de esta pestaña y se pierde al cerrarla.
+    st.download_button(
+        "⬇️ Download the report (HTML)",
+        data=resultado["html"],
+        file_name=f"saas-contract-review-{time.strftime('%Y-%m-%d')}.html",
+        mime="text/html",
+    )
 
     components.html(resultado["html"], height=900, scrolling=True)
 
@@ -733,7 +785,16 @@ def pantalla_subida():
 
 
 # ---------------------------------------------------------------------------
-if st.session_state.resultado is not None:
+if not CONTRASENA_ACCESO:
+    # Sin contraseña configurada, la app no analiza: abierta por accidente
+    # pagaría los análisis de cualquiera que pase.
+    st.error(
+        "The app is not available right now. Please try again later. "
+        "(Configuration: CONTRASENA_ACCESO is missing from Secrets.)"
+    )
+elif not st.session_state.autenticado:
+    pantalla_acceso()
+elif st.session_state.resultado is not None:
     pantalla_informe()
 else:
     pantalla_subida()
