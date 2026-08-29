@@ -17,24 +17,34 @@ MANUAL_VERSION_ESPERADA = "V1 – 21 de agosto de 2026"
 # que la definición vive en un solo sitio.
 # ---------------------------------------------------------------------------
 
+# `nombre` y `resumen` van en español porque se inyectan en el prompt del
+# triaje, que está calibrado en español junto con el manual. `name`, `summary`
+# y `detail` son los textos que ve el usuario en la interfaz, en inglés.
 TRAMOS = {
     "A": {
         "nombre": "Ligero",
         "resumen": "Contratos de menos de 25.000 € al año",
-        "detalle": "Se exigen solo las cláusulas de riesgo alto y crítico. No se penaliza "
-                   "la falta de escrow de código, planes de continuidad o seguros elevados.",
+        "name": "Light",
+        "summary": "Contracts below €25,000 per year",
+        "detail": "Only high and critical risk clauses are assessed. The contract is not "
+                  "penalised for lacking source code escrow, continuity plans or high "
+                  "insurance limits.",
     },
     "B": {
         "nombre": "Estándar",
         "resumen": "Contratos de entre 25.000 € y 250.000 € al año",
-        "detalle": "Se exigen las cláusulas de riesgo medio, alto y crítico. Es el nivel "
-                   "adecuado para la mayoría de contratos SaaS corporativos.",
+        "name": "Standard",
+        "summary": "Contracts between €25,000 and €250,000 per year",
+        "detail": "Medium, high and critical risk clauses are assessed. This is the right "
+                  "level for most corporate SaaS agreements.",
     },
     "C": {
         "nombre": "Reforzado",
         "resumen": "Más de 250.000 € al año, servicio crítico para el negocio, "
                    "o sistema de IA de alto riesgo",
-        "detalle": "Se exigen todas las cláusulas del manual, sin excepción.",
+        "name": "Enhanced",
+        "summary": "Above €250,000 per year, business-critical service, or high-risk AI system",
+        "detail": "Every clause in the playbook is assessed, without exception.",
     },
 }
 
@@ -278,15 +288,26 @@ Además de los resultados por módulo, recibes un bloque `RESULTADO AGREGADO` ca
 
 La palabra "PEPA" no debe aparecer en el informe. Usa el nombre de la parte adquirente identificada en la fase 0, o "el Cliente" si no fue identificable.
 
-## Terminología obligatoria del informe
-Los estados técnicos que recibes NO se escriben tal cual. Cada uno tiene un nombre fijo en el informe, y no se admiten sinónimos ni variantes:
+## Cómo se llama el manual en el informe
+El documento de criterios se denomina "Manual de Revisión" en español. **En un informe redactado en inglés se denomina SIEMPRE "the playbook"**, nunca "the manual": playbook es el término del oficio en contratación anglosajona. En otros idiomas, usa el equivalente profesional habitual.
 
-- `CONFORME` → **"Conforme a manual"**. Es la fórmula exacta, tanto en el encabezado de cada cláusula como en el listado del apartado 3 y en cualquier recuento. No escribas "conforme" a secas, ni "cumple", ni "correcta", ni "sin desviación".
-- `AUSENTE` → **"Cláusula ausente"**. Son las cláusulas que el manual exige y que NO aparecen en el contrato revisado. El apartado 4 se titula exactamente "Cláusulas ausentes" y las recoge todas.
-- `DESVIACION_ACEPTABLE` → "Desviación aceptable".
-- `RECHAZADA` → "Posición rechazada".
-- `NO_APLICA` → "No aplicable".
-- `NO_EXIGIBLE` → "No exigible en este nivel".
+## Terminología obligatoria del informe
+Los estados técnicos que recibes NO se escriben tal cual. Cada uno tiene un nombre fijo, **redactado en el idioma del informe** (`idioma_contrato`), y no se admiten sinónimos ni variantes dentro de un mismo informe:
+
+| Estado | Informe en español | Informe en inglés |
+|---|---|---|
+| `CONFORME` | Conforme a manual | Compliant with playbook |
+| `AUSENTE` | Cláusula ausente | Missing clause |
+| `DESVIACION_ACEPTABLE` | Desviación aceptable | Acceptable deviation |
+| `RECHAZADA` | Posición rechazada | Rejected position |
+| `NO_APLICA` | No aplicable | Not applicable |
+| `NO_EXIGIBLE` | No exigible en este nivel | Not required at this level |
+
+Si el informe va en un tercer idioma, traduce estas fórmulas a ese idioma y úsalas de forma consistente. Lo que está prohibido es mezclar: un informe en inglés no puede llevar epígrafes en español, ni al revés.
+
+`CONFORME` es la fórmula exacta tanto en el encabezado de cada cláusula como en el listado del apartado 3 y en cualquier recuento: no escribas "conforme" a secas, ni "cumple", ni "correcta", ni "sin desviación".
+
+`AUSENTE` designa las cláusulas que el manual exige y que NO aparecen en el contrato revisado. El apartado 4 se titula "Cláusulas ausentes" ("Missing clauses" en inglés) y las recoge todas.
 
 Si una cláusula trae `motivo_exigible` relleno, significa que su nivel de riesgo la habría dejado fuera pero se exige igualmente por ser de veto, por pertenecer a las secciones 6 o 7, o por formar parte del núcleo mínimo. Dilo así en su ficha —"exigible en todo nivel por [motivo]"— y NO lo señales como incoherencia: es el comportamiento previsto del manual.
 
@@ -367,8 +388,8 @@ ENCABEZADO FIJO, antes del apartado 0, en todos los informes:
    1.9 Vetos disparados (Sí/No) y cuáles.
 2. Cláusulas de veto. Estado de las 13, con las rechazadas o ausentes destacadas al inicio.
 3. Análisis de las cláusulas con desviación (estados RECHAZADA, AUSENTE y DESVIACION_ACEPTABLE), en el orden del manual. Por cada una: 3.x.1 cláusula y sección · 3.x.2 cita literal con localizador, o AUSENTE · 3.x.3 posición detectada · 3.x.4 nivel de cumplimiento · 3.x.5 peso y de qué riesgo del manual sale · 3.x.6 puntuación y ponderada · 3.x.7 veto y su estado · 3.x.8 redline.
-   Al final del apartado 3, bajo el epígrafe "Cláusulas conformes a manual", se listan en UNA SOLA LÍNEA cada una — sección · nombre · localizador de la cita · peso — sin desarrollar los sub-apartados: el detalle completo de una cláusula conforme no aporta a la negociación. Cada línea empieza con la fórmula "Conforme a manual —".
-4. Cláusulas ausentes. Una entrada por cada cláusula que el manual exige y el contrato no contiene, con el TEXTO COMPLETO propuesto para insertar, transcrito ÍNTEGRAMENTE desde `redline.texto_propuesto` de la cláusula correspondiente. Está PROHIBIDO remitir a otro apartado, resumir el texto, abreviarlo con puntos suspensivos o sustituirlo por una descripción de lo que debería decir: este apartado existe para que el abogado copie y pegue, y un resumen no se puede pegar en un contrato. Si una cláusula ausente no trae texto propuesto, hazlo constar expresamente como incidencia.
+   Al final del apartado 3, bajo el epígrafe "Cláusulas conformes a manual" ("Clauses compliant with playbook" en inglés), se listan en UNA SOLA LÍNEA cada una — sección · nombre · localizador de la cita · peso — sin desarrollar los sub-apartados: el detalle completo de una cláusula conforme no aporta a la negociación. Cada línea empieza con la fórmula fijada en la tabla de terminología para su idioma.
+4. Cláusulas ausentes ("Missing clauses" en inglés). Una entrada por cada cláusula que el manual exige y el contrato no contiene, con el TEXTO COMPLETO propuesto para insertar, transcrito ÍNTEGRAMENTE desde `redline.texto_propuesto` de la cláusula correspondiente. Está PROHIBIDO remitir a otro apartado, resumir el texto, abreviarlo con puntos suspensivos o sustituirlo por una descripción de lo que debería decir: este apartado existe para que el abogado copie y pegue, y un resumen no se puede pegar en un contrato. Si una cláusula ausente no trae texto propuesto, hazlo constar expresamente como incidencia.
 5. Cláusulas no exigidas en este tramo. Lista con su riesgo y una línea sobre qué protegerían, para que el abogado pueda decidir si alguna merece exigirse pese al tramo.
 6. Cálculo del score, tal como consta en `RESULTADO AGREGADO`: Σ(peso × puntuación), Σ(pesos), nº de cláusulas del denominador, resultado. No recalcules estas cifras.
 7. Anexo IA: resultado de las 7 dimensiones. Solo si la sección 7 aplica.
