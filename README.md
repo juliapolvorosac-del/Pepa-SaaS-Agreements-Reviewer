@@ -1,36 +1,42 @@
-# Pepa-SaaS-Agreements-Reviewer - Revisor de Contratos SaaS
+# Pepa-SaaS-Agreements-Reviewer — SaaS Contract Reviewer
 
-Aplicación web que analiza contratos SaaS desde la posición de la **parte adquirente** y genera un informe de asistencia a la revisión jurídica: puntuación de riesgo ponderada, análisis cláusula por cláusula contra un manual de criterios propio y propuestas de redacción alternativa (*redlines*) listas para negociar.
+Web application that analyses SaaS agreements from the standpoint of the **acquiring party** and produces a legal review assistance report: a weighted risk score, clause-by-clause analysis against a proprietary review playbook, and alternative drafting proposals (*redlines*) ready for negotiation.
 
-Proyecto educativo desarrollado por **Julia Polvorosa Cáceres**, abogada in-house especializada en contratación tecnológica, como trabajo final del curso *IA para abogados*.
+Educational project developed by **Julia Polvorosa Cáceres**, in-house lawyer specialising in technology contracts, as the final project of the *AI for Lawyers* course.
 
-## Qué hace
+## Try the app
 
-1. **Triaje** — comprueba que el documento es un contrato SaaS legible y en ámbito de aplicación, identifica partes, ley aplicable y jurisdicción, y determina el nivel de exigencia aplicable según el valor y la criticidad del contrato.
-2. **Revisión por módulos** — evalúa 67 cláusulas organizadas en 7 módulos (condiciones comerciales, propiedad intelectual y datos, responsabilidad, duración y terminación, RGPD, Reglamento de IA y un módulo específico para proveedores estadounidenses), en llamadas paralelas a la API de Claude.
-3. **Informe** — consolida los resultados en un informe HTML autónomo con veredicto, semáforo de riesgo, estado de las 13 cláusulas de veto y propuestas de redacción. La aplicación recalcula el score de forma independiente en código y avisa si detecta discrepancias.
+**[Open the application →](https://pepa-saas.streamlit.app/)**
 
-El análisis se realiza contra un manual de revisión jurídica propio (derecho español y de la Unión Europea), diseñado para su uso conjunto con modelos extensos de lenguaje.
+Access is password-protected: every analysis makes real calls to the Claude API and has a cost. To request the password, write to juliapolvorosac@gmail.com. The generated report can be downloaded as a self-contained HTML document.
 
-## Características de diseño
+## What it does
 
-- **Sin preguntas al usuario**: toda incógnita se resuelve como asunción declarada o como incidencia visible en el informe.
-- **Citas literales con localizador** (cláusula y página), para que el abogado verifique cada conclusión en segundos.
-- **Defensa frente a manipulación**: el contenido del documento se trata siempre como dato, nunca como instrucción; los intentos de manipulación se destacan en el informe.
-- **El veredicto nunca autoriza una firma**: la herramienta asiste al abogado, no le sustituye.
-- **Sin persistencia**: los documentos se procesan en memoria y no se almacenan.
+1. **Triage** — checks that the document is a readable, in-scope SaaS agreement, identifies the parties, the governing law and the jurisdiction, and determines the level of scrutiny to apply based on the value and criticality of the contract.
+2. **Module-based review** — assesses 67 clauses organised into 7 modules (commercial terms, intellectual property and data, liability, term and termination, GDPR, the EU AI Act, and a dedicated module for US-based providers), in parallel calls to the Claude API.
+3. **Report** — consolidates the results into a self-contained HTML report with a verdict, a risk traffic light, the status of the 13 veto clauses and drafting proposals. The application independently recalculates the score in code and warns if it detects discrepancies.
 
-## Tecnología
+The analysis is performed against a proprietary legal review playbook (Spanish and European Union law), designed to be used together with large language models.
 
-- [Streamlit](https://streamlit.io/) como interfaz web.
-- [API de Claude](https://www.anthropic.com/) (Anthropic) como motor de análisis, con arquitectura de tres fases encadenadas y caché de prompts.
+## Design principles
 
-## Aviso legal
+- **No questions asked**: every unknown is resolved as a declared assumption or as an issue made visible in the report.
+- **Literal quotes with locators** (clause and page), so the lawyer can verify every conclusion in seconds.
+- **Defence against manipulation**: the content of the document is always treated as data, never as instructions; manipulation attempts are highlighted in the report.
+- **The verdict never authorises a signature**: the tool assists the lawyer, it does not replace them.
+- **No persistence**: documents are processed in memory and never stored.
 
-El resultado generado por esta herramienta es un análisis preparatorio de asistencia a la revisión jurídica. **No sustituye a la revisión por un abogado cualificado y no constituye asesoramiento jurídico.**
+## Technology
 
-## Propiedad intelectual
+- [Streamlit](https://streamlit.io/) as the web interface.
+- [Claude API](https://www.anthropic.com/) (Anthropic) as the analysis engine, with a three-phase chained architecture and prompt caching.
 
-**© 2026 Julia Polvorosa Cáceres. Todos los derechos reservados.**
+## Legal notice
 
-Este repositorio se publica únicamente con fines de visualización como proyecto educativo. No se concede ninguna licencia de uso, reproducción, modificación ni distribución del código, de los prompts ni del manual de revisión. Para cualquier consulta: juliapolvorosac@gmail.com
+The output generated by this tool is a preparatory analysis to assist legal review. **It does not replace review by a qualified lawyer and does not constitute legal advice.**
+
+## Intellectual property
+
+**© 2026 Julia Polvorosa Cáceres. All rights reserved.**
+
+This repository is published for viewing purposes only, as an educational project. No licence is granted to use, reproduce, modify or distribute the code, the prompts or the review playbook. For any enquiries: juliapolvorosac@gmail.com
