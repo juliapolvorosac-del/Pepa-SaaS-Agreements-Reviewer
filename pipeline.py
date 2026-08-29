@@ -538,13 +538,11 @@ def _precalentar_cache(cliente, manual: str, contrato: str, contador=None,
                 "cache_lectura": getattr(uso, "cache_read_input_tokens", 0) or 0,
             })
 
+    # El mínimo de `max_tokens` que admite la API es 1: con 0, la llamada se
+    # rechazaba antes de escribir el caché y el precalentamiento hacía siempre
+    # un viaje en balde antes del bueno.
     try:
-        _intento(0)
-    except anthropic.BadRequestError:
-        try:
-            _intento(1)
-        except Exception:
-            pass
+        _intento(1)
     except Exception:
         pass
 
