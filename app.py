@@ -50,22 +50,22 @@ CLAVE_API_POR_PROVEEDOR = {
 
 TRAMO_POR_DEFECTO = "B"
 
-# Mensajes de error de la fase 0 (briefing §5)
+# Mensajes de error de la fase 0 (briefing §5). La interfaz está en inglés.
 MENSAJES_ERROR = {
     "extraccion_insuficiente": (
-        "No hemos podido leer el texto del documento. Si es un PDF escaneado, "
-        "necesita OCR previo. Prueba con una versión con texto seleccionable."
+        "We could not read the text of the document. If it is a scanned PDF, it "
+        "needs OCR first. Try a version with selectable text."
     ),
     "documento_no_contractual": (
-        "El documento no parece ser un contrato ni un anexo contractual."
+        "This document does not appear to be a contract or a contractual annex."
     ),
     "version_manual_no_coincide": (
-        "No hemos podido completar el análisis. Inténtalo más tarde."
+        "We could not complete the analysis. Please try again later."
     ),
 }
 
 st.set_page_config(
-    page_title="PEPA. Revisor de Contratos SaaS",
+    page_title="PEPA. SaaS Contract Reviewer",
     page_icon="⚖️",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -286,7 +286,22 @@ st.markdown(
         border: none;
         border-top: 2px solid #ABA8E8;
         width: 84px;
-        margin: 0 auto 1.6em;
+        margin: 0 auto 1.2em;
+    }
+    /* Marco de referencia: se declara en la propia pantalla de subida, no solo
+       dentro del informe, para que el usuario sepa a qué derecho responde el
+       análisis antes de subir nada. */
+    .marco-pepa {
+        text-align: center;
+        max-width: 640px;
+        margin: 0 auto 2em;
+        padding: 10px 18px;
+        border: 1px solid #ABA8E8;
+        border-radius: 8px;
+        background: rgba(171, 168, 232, 0.15);
+        font-size: 0.92rem;
+        line-height: 1.45;
+        color: #2F2E48;
     }
 
     /* ---------- Línea de vetos, bajo las métricas ---------- */
@@ -315,23 +330,27 @@ with st.sidebar:
     st.markdown(
         """
 <div class="lateral-pepa">
-  <p class="destacado">Esta herramienta es un proyecto educativo de Julia
-  Polvorosa Cáceres, abogada in-house. El resultado obtenido mediante el uso
-  de la misma no sustituye al asesoramiento legal.</p>
+  <p class="destacado">This tool is an educational project by Julia Polvorosa
+  Cáceres, in-house lawyer. The result obtained through its use does not
+  replace legal advice.</p>
 
-  <p>Esta herramienta utiliza inteligencia artificial mediante la API de
-  Claude. Al utilizar esta herramienta, aceptas los
+  <p>Reviews are carried out from the standpoint of the party acquiring the
+  service, against a review playbook built on <strong>Spanish and European
+  Union law</strong>.</p>
+
+  <p>This tool uses artificial intelligence through the Claude API. By using
+  this tool, you accept the
   <a href="https://www.anthropic.com/legal/commercial-terms">Commercial Terms
-  of Use</a> y el
+  of Use</a> and the
   <a href="https://www.anthropic.com/legal/data-processing-addendum">Data
   Processing Addendum</a>.</p>
 
-  <p>Los datos introducidos en esta herramienta no serán utilizados para
-  entrenar modelos de inteligencia artificial.</p>
+  <p>Data entered into this tool will not be used to train artificial
+  intelligence models.</p>
 
-  <p class="destacado">© Todos los derechos reservados</p>
+  <p class="destacado">© All rights reserved</p>
 
-  <p>Contacto: juliapolvorosac@gmail.com</p>
+  <p>Contact: juliapolvorosac@gmail.com</p>
 </div>
         """,
         unsafe_allow_html=True,
@@ -373,8 +392,8 @@ def pantalla_informe():
 
     if resultado.get("informe_truncado"):
         st.warning(
-            "⚠️ El informe ha llegado incompleto: se ha alcanzado el límite de "
-            "longitud antes de terminarlo. Revísalo con esa cautela."
+            "⚠️ The report arrived incomplete: the length limit was reached "
+            "before it finished. Read it with that caveat in mind."
         )
 
     # El score, el semáforo y los vetos los calcula ÚNICAMENTE la aplicación
@@ -385,139 +404,137 @@ def pantalla_informe():
 
     col1, col2, col3, col4 = st.columns(4)
     col1.metric(
-        "Score (calculado por la aplicación)",
-        f"{agregado['score_pct']} %" if agregado["score_pct"] is not None else "N/D",
+        "Score (computed by the app)",
+        f"{agregado['score_pct']} %" if agregado["score_pct"] is not None else "N/A",
     )
-    col2.metric("Semáforo", agregado["semaforo"])
+    col2.metric("Traffic light", agregado["semaforo"])
     if consumo:
-        col3.metric("Coste de la revisión", f"{consumo['coste_total_usd']:.2f} $")
+        col3.metric("Cost of the review", f"${consumo['coste_total_usd']:.2f}")
     if tiempos.get("total"):
-        col4.metric("Duración", _duracion(tiempos["total"]))
+        col4.metric("Duration", _duracion(tiempos["total"]))
     st.caption(
-        f"Σ peso×puntuación = {agregado['suma_ponderada']} · "
-        f"Σ pesos = {agregado['suma_pesos']} · "
-        f"{agregado['n_denominador']} cláusulas en el denominador."
+        f"Σ weight×score = {agregado['suma_ponderada']} · "
+        f"Σ weights = {agregado['suma_pesos']} · "
+        f"{agregado['n_denominador']} clauses in the denominator."
     )
 
     # Los vetos ya no van en una tarjeta estrecha: ocupan una línea entera bajo
     # las métricas, donde caben los nombres de las cláusulas afectadas.
     if agregado["hay_veto_disparado"]:
         st.markdown(
-            "<div class='vetos-pepa'><strong>⛔ Vetos disparados:</strong> "
+            "<div class='vetos-pepa'><strong>⛔ Vetoes triggered:</strong> "
             + " · ".join(agregado["vetos_disparados"])
             + "</div>",
             unsafe_allow_html=True,
         )
     else:
         st.markdown(
-            "<div class='vetos-pepa'><strong>Vetos disparados:</strong> ninguno. "
-            "Ninguna de las trece cláusulas críticas del manual se sitúa en "
-            "posición rechazada.</div>",
+            "<div class='vetos-pepa'><strong>Vetoes triggered:</strong> none. "
+            "None of the playbook's thirteen critical clauses falls into a "
+            "rejected position.</div>",
             unsafe_allow_html=True,
         )
 
     if consumo:
         def _n(valor):
-            """Miles con punto, al modo español."""
-            return f"{valor:,}".replace(",", ".")
+            """Separador de miles con coma, al modo inglés."""
+            return f"{valor:,}"
 
         # Cada línea del consumo lleva su duración; la clave de la fase coincide
         # con la que usa el cronómetro del pipeline.
         clave_tiempo = {
-            "Fase 0 · Triaje": "triaje",
-            "Fase 1 · Revisión por módulos": "modulos",
-            "Fase 2 · Informe": "informe",
+            "Phase 0 · Triage": "triaje",
+            "Phase 1 · Clause review": "modulos",
+            "Phase 2 · Report": "informe",
         }
 
-        with st.expander("Detalle del consumo y los tiempos"):
+        with st.expander("Usage and timing detail"):
             for fila in consumo["por_fase"]:
-                entrada = f"{_n(fila['entrada'])} nuevos"
+                entrada = f"{_n(fila['entrada'])} new"
                 if fila["cache_lectura"]:
-                    entrada += f" + {_n(fila['cache_lectura'])} desde caché"
+                    entrada += f" + {_n(fila['cache_lectura'])} read from cache"
                 if fila["cache_escritura"]:
-                    entrada += f" + {_n(fila['cache_escritura'])} escritos en caché"
+                    entrada += f" + {_n(fila['cache_escritura'])} written to cache"
                 duracion = tiempos.get(clave_tiempo.get(fila["nombre"], ""))
                 sufijo_tiempo = f" · ⏱ {_duracion(duracion)}" if duracion else ""
                 st.markdown(
                     f"**{fila['nombre']}** — {fila['llamadas']} "
-                    f"{'llamada' if fila['llamadas'] == 1 else 'llamadas'} · "
+                    f"{'call' if fila['llamadas'] == 1 else 'calls'} · "
                     f"{fila['modelo']}{sufijo_tiempo}  \n"
-                    f"Entrada: {entrada} → {fila['coste_entrada_usd']:.3f} $  \n"
-                    f"Generados: {_n(fila['salida'])} → {fila['coste_salida_usd']:.3f} $  \n"
-                    f"Subtotal: **{fila['coste_usd']:.3f} $**"
+                    f"Input: {entrada} → ${fila['coste_entrada_usd']:.3f}  \n"
+                    f"Generated: {_n(fila['salida'])} → ${fila['coste_salida_usd']:.3f}  \n"
+                    f"Subtotal: **${fila['coste_usd']:.3f}**"
                 )
             st.markdown("---")
             st.markdown(
-                f"**Total: {consumo['coste_total_usd']:.2f} $** "
-                f"({consumo['n_llamadas']} llamadas) · "
-                f"**Duración: {_duracion(tiempos.get('total'))}**  \n"
-                f"Texto enviado (entrada): {consumo['coste_entrada_usd']:.2f} $ · "
-                f"Texto generado (salida): {consumo['coste_salida_usd']:.2f} $ "
-                f"— **{consumo['pct_salida']} % del total**  \n"
-                f"El texto generado se factura a una tarifa cinco veces mayor "
-                f"que el enviado."
+                f"**Total: ${consumo['coste_total_usd']:.2f}** "
+                f"({consumo['n_llamadas']} calls) · "
+                f"**Duration: {_duracion(tiempos.get('total'))}**  \n"
+                f"Text sent (input): ${consumo['coste_entrada_usd']:.2f} · "
+                f"Text generated (output): ${consumo['coste_salida_usd']:.2f} "
+                f"— **{consumo['pct_salida']} % of the total**  \n"
+                f"Generated text is billed at five times the rate of text sent."
             )
             if consumo["cache_lectura"]:
                 st.markdown(
-                    f"El manual y el contrato se reutilizaron desde la caché "
-                    f"({_n(consumo['cache_lectura'])} tokens leídos a una décima "
-                    f"parte de tarifa): unos **{consumo['ahorro_cache_usd']:.2f} $** "
-                    "menos que enviarlos completos en cada llamada."
+                    f"The playbook and the contract were reused from cache "
+                    f"({_n(consumo['cache_lectura'])} tokens read at one tenth of "
+                    f"the rate): about **${consumo['ahorro_cache_usd']:.2f}** less "
+                    "than sending them in full on every call."
                 )
             # Si la revisión por módulos escribió caché en vez de leerla, el
             # manual se ha pagado una vez por módulo. No rompe el análisis, pero
             # encarece la revisión y conviene saberlo.
             modulos = next(
-                (f for f in consumo["por_fase"] if f["nombre"].startswith("Fase 1")),
+                (f for f in consumo["por_fase"] if f["nombre"].startswith("Phase 1")),
                 None,
             )
             if modulos and modulos["cache_escritura"] and not modulos["cache_lectura"]:
                 st.warning(
-                    "⚠️ La caché no se reutilizó en la revisión por módulos: cada "
-                    "uno reescribió el manual en lugar de leerlo, lo que ha "
-                    "encarecido esta revisión alrededor de un 20 %. No afecta al "
-                    "análisis. Si se repite en la siguiente, conviene revisarlo."
+                    "⚠️ The cache was not reused during the clause review: each "
+                    "module rewrote the playbook instead of reading it, which made "
+                    "this review roughly 20 % more expensive. It does not affect "
+                    "the analysis. If it happens again, it is worth looking into."
                 )
             st.caption(
-                "Estimación calculada sobre los tokens realmente consumidos y "
-                "las tarifas públicas de Anthropic. El importe facturado puede "
-                "variar ligeramente."
+                "Estimate based on the tokens actually consumed and Anthropic's "
+                "published rates. The amount invoiced may differ slightly."
             )
 
     # Elementos que la app añade ENCIMA del HTML (briefing §7): el HTML del
     # informe no se toca ni se reestiliza.
     if agregado["intentos_manipulacion"]:
         texto = "\n\n".join(
-            f"- **{m['origen']}** (localizador: {m['localizador'] or 'no indicado'})"
-            f"\n  > {m['texto_detectado'] or '(sin texto registrado)'}"
+            f"- **{m['origen']}** (location: {m['localizador'] or 'not stated'})"
+            f"\n  > {m['texto_detectado'] or '(no text recorded)'}"
             for m in agregado["intentos_manipulacion"]
         )
         st.error(
-            "🚨 **Intento de manipulación detectado en el documento.** "
-            "El documento contiene texto que parece dirigido al sistema de "
-            "análisis (instrucciones de puntuación u órdenes de ignorar reglas). "
-            "El análisis lo ha ignorado, pero revísalo con especial atención en "
-            "el punto exacto indicado:\n\n" + texto
+            "🚨 **Manipulation attempt detected in the document.** The document "
+            "contains text that appears to be addressed to the analysis system "
+            "(scoring instructions, or orders to ignore rules). The analysis "
+            "ignored it, but review it carefully at the exact point indicated:"
+            "\n\n" + texto
         )
 
     if resultado["aviso_transcripcion"]:
         st.warning(
-            "⚠️ El texto del informe no reproduce con exactitud el score "
-            f"calculado arriba (**{agregado['score_pct']} %**). Toma como "
-            "referencia siempre la cifra mostrada en esta pantalla, no la del "
-            "documento."
+            "⚠️ The text of the report does not exactly reproduce the score "
+            f"computed above (**{agregado['score_pct']} %**). Always take the "
+            "figure shown on this screen as the reference, not the one inside "
+            "the document."
         )
 
     if resultado["incidencias_pipeline"]:
         st.warning(
-            "⚠️ Algunos módulos de revisión no devolvieron resultados válidos y "
-            "sus cláusulas no están incluidas en el análisis: "
+            "⚠️ Some review modules did not return valid results, and their "
+            "clauses are not included in the analysis: "
             + " · ".join(resultado["incidencias_pipeline"])
         )
 
     components.html(resultado["html"], height=900, scrolling=True)
 
-    if st.button("Analizar otro contrato"):
+    if st.button("Analyse another contract"):
         st.session_state.resultado = None
         st.rerun()
 
@@ -527,24 +544,27 @@ def pantalla_informe():
 # ---------------------------------------------------------------------------
 def pantalla_subida():
     st.markdown(
-        "<h2 class='titulo-pepa'>PEPA. Revisor de Contratos SaaS</h2>"
-        "<hr class='regla-pepa'>",
+        "<h2 class='titulo-pepa'>PEPA. SaaS Contract Reviewer</h2>"
+        "<hr class='regla-pepa'>"
+        "<p class='marco-pepa'>Contracts are reviewed from the standpoint of the "
+        "<strong>acquiring party</strong>, against a review playbook built on "
+        "<strong>Spanish and European Union law</strong>.</p>",
         unsafe_allow_html=True,
     )
     st.markdown(
         """
-¿Cómo usar esta herramienta?
+**How to use this tool**
 
-1. Sube el contrato SaaS en PDF, DOCX, TXT o MD. El PDF debe tener texto seleccionable: un escaneado sin OCR no sirve.
-2. Incluye todos los documentos anexos si los tienes: order form, DPA, SLA, anexos técnicos. Cuantos más subas, más preciso será el análisis.
-3. No subas documentos confidenciales, sujetos a acuerdos de confidencialidad, ni con datos personales.
-4. Elige el nivel de exigencia según el importe y la importancia del servicio para tu negocio.
-5. Espera al informe. La herramienta no te hará más preguntas: cuando falte un dato, asumirá lo más prudente y te dirá qué ha asumido.
+1. Upload the SaaS contract in PDF, DOCX, TXT or MD. PDFs must contain selectable text: a scan without OCR will not work.
+2. Include every annex you have: order form, DPA, SLA, technical schedules. The more you upload, the more accurate the analysis.
+3. Do not upload confidential documents, documents subject to a non-disclosure agreement, or documents containing personal data.
+4. Choose the level of scrutiny according to the contract value and how important the service is to your business.
+5. Wait for the report. The tool will ask you nothing else: where a fact is missing, it assumes the most prudent reading and tells you what it assumed.
         """
     )
 
     ficheros = st.file_uploader(
-        "Arrastra aquí el contrato y sus anexos, o haz clic para seleccionarlos",
+        "Drag the contract and its annexes here, or click to select them",
         type=["pdf", "docx", "txt", "md"],
         accept_multiple_files=True,
     )
@@ -552,23 +572,23 @@ def pantalla_subida():
     # Nivel de exigencia. Lo elige el usuario porque conoce el importe y la
     # criticidad del servicio, dos datos que el contrato a menudo no recoge y
     # que la herramienta tendría que asumir.
-    st.markdown("**¿Qué nivel de exigencia aplicamos a este contrato?**")
+    st.markdown("**What level of scrutiny should we apply to this contract?**")
     tramo = st.radio(
-        "Nivel de exigencia",
+        "Level of scrutiny",
         options=list(TRAMOS.keys()),
         index=list(TRAMOS.keys()).index(TRAMO_POR_DEFECTO),
-        format_func=lambda t: f"{TRAMOS[t]['nombre']} — {TRAMOS[t]['resumen']}",
+        format_func=lambda t: f"{TRAMOS[t]['name']} — {TRAMOS[t]['summary']}",
         label_visibility="collapsed",
     )
     st.caption(
-        TRAMOS[tramo]["detalle"]
-        + " En cualquier nivel se exigen siempre las cláusulas que pueden vetar "
-        "el contrato, todo lo relativo a protección de datos e inteligencia "
-        "artificial, y las cuatro cláusulas del núcleo mínimo."
+        TRAMOS[tramo]["detail"]
+        + " At every level, the tool always assesses the clauses that can veto "
+        "the contract on their own, everything concerning data protection and "
+        "artificial intelligence, and the four minimum-core clauses."
     )
 
     analizar = st.button(
-        "Analizar contrato",
+        "Analyse contract",
         type="primary",
         disabled=not ficheros,
     )
@@ -579,24 +599,24 @@ def pantalla_subida():
     # --- Límites por sesión -------------------------------------------------
     if st.session_state.analisis_realizados >= MAX_ANALISIS_POR_SESION:
         st.error(
-            "Has alcanzado el límite de análisis de esta sesión. "
-            "Recarga la página para empezar una sesión nueva."
+            "You have reached the limit of analyses for this session. "
+            "Reload the page to start a new one."
         )
         return
     if len(ficheros) > MAX_FICHEROS:
-        st.error(f"Máximo {MAX_FICHEROS} ficheros por análisis.")
+        st.error(f"A maximum of {MAX_FICHEROS} files per analysis.")
         return
     total_mb = sum(f.size for f in ficheros) / (1024 * 1024)
     if total_mb > MAX_MB_TOTAL:
-        st.error(f"El tamaño total no puede superar {MAX_MB_TOTAL} MB.")
+        st.error(f"The total size cannot exceed {MAX_MB_TOTAL} MB.")
         return
 
     nombre_clave = CLAVE_API_POR_PROVEEDOR[PROVEEDOR]
     api_key = st.secrets.get(nombre_clave, "")
     if not api_key:
         st.error(
-            "No hemos podido completar el análisis. Inténtalo más tarde. "
-            f"(Configuración: falta {nombre_clave} en los Secrets.)"
+            "We could not complete the analysis. Please try again later. "
+            f"(Configuration: {nombre_clave} is missing from Secrets.)"
         )
         return
 
@@ -608,7 +628,7 @@ def pantalla_subida():
 
     inicio = time.monotonic()
 
-    with st.status("Preparando el análisis…", expanded=True) as estado:
+    with st.status("Preparing the analysis…", expanded=True) as estado:
         barra = st.progress(0)
 
         def _avance(pct, texto):
@@ -624,15 +644,15 @@ def pantalla_subida():
             # triaje es corto, la revisión por módulos se lleva el grueso y el
             # informe ocupa el tramo final.
             if etapa == "triaje":
-                _avance(4, "Analizando el documento")
+                _avance(4, "Analysing the document")
             elif etapa == "modulos":
                 pct = 12 + int(70 * actual / total) if total else 12
-                _avance(pct, f"Revisando cláusulas ({actual} de {total})")
+                _avance(pct, f"Reviewing clauses ({actual} of {total})")
             elif etapa == "informe":
-                _avance(84, "Preparando el informe")
+                _avance(84, "Preparing the report")
 
         try:
-            _avance(1, "Leyendo los documentos")
+            _avance(1, "Reading the documents")
             contrato = normalizar_documentos([(f.name, f.getvalue()) for f in ficheros])
             manual = _cargar_manual()
 
@@ -645,69 +665,68 @@ def pantalla_subida():
             st.session_state.analisis_realizados += 1
             barra.progress(100)
             estado.update(
-                label="Análisis completado en "
+                label="Analysis completed in "
                 + _duracion(time.monotonic() - inicio) + " · 100 %",
                 state="complete",
             )
 
         except ErrorTriaje as e:
-            estado.update(label="Análisis detenido", state="error")
+            estado.update(label="Analysis stopped", state="error")
             detalle_tecnico = (
                 f"ErrorTriaje · codigo={e.codigo!r} · detalle={e.detalle!r} · "
                 f"tipo_detectado={e.tipo_detectado!r}\n\n" + traceback.format_exc()
             )
             if e.codigo == "fuera_de_ambito":
-                tipo = e.tipo_detectado or "otro tipo"
+                tipo = e.tipo_detectado or "another kind"
                 mensaje_error = (
-                    f"Este documento parece un contrato de {tipo}, y esta "
-                    "herramienta solo analiza contratos SaaS."
+                    f"This document appears to be a {tipo} contract, and this "
+                    "tool only reviews SaaS agreements."
                 )
             else:
                 mensaje_error = MENSAJES_ERROR.get(
                     e.codigo, MENSAJES_ERROR["version_manual_no_coincide"]
                 )
         except ErrorProveedorNoDisponible as e:
-            estado.update(label="Análisis detenido", state="error")
+            estado.update(label="Analysis stopped", state="error")
             detalle_tecnico = traceback.format_exc()
             mensaje_error = (
-                "El servicio no está disponible en este momento por un problema "
-                "de configuración ajeno al documento."
-                + (f"\n\n**(Modo depuración: {e})**" if MODO_DEPURACION else "")
+                "The service is unavailable right now because of a configuration "
+                "issue unrelated to your document."
+                + (f"\n\n**(Debug mode: {e})**" if MODO_DEPURACION else "")
             )
         except ErrorSaldoInsuficiente:
-            estado.update(label="Análisis detenido", state="error")
+            estado.update(label="Analysis stopped", state="error")
             detalle_tecnico = traceback.format_exc()
             mensaje_error = (
-                "El servicio no está disponible en este momento por un problema "
-                "de configuración ajeno al documento. Vuelve a intentarlo más "
-                "tarde."
+                "The service is unavailable right now because of a configuration "
+                "issue unrelated to your document. Please try again later."
                 + (
-                    "\n\n**(Modo depuración: la cuenta de Anthropic se ha quedado "
-                    "sin saldo. Recarga en console.anthropic.com → Plans & Billing.)**"
+                    "\n\n**(Debug mode: the Anthropic account has run out of "
+                    "credit. Top it up at console.anthropic.com → Plans & Billing.)**"
                     if MODO_DEPURACION
                     else ""
                 )
             )
         except ErrorTruncamiento:
-            estado.update(label="Análisis detenido", state="error")
+            estado.update(label="Analysis stopped", state="error")
             detalle_tecnico = traceback.format_exc()
             mensaje_error = (
-                "El informe generado excede el tamaño máximo y ha llegado "
-                "incompleto. No lo mostramos para evitar conclusiones parciales. "
-                "Inténtalo de nuevo o divide el contrato en menos anexos."
+                "The report exceeds the maximum length and arrived incomplete. "
+                "We are not showing it, to avoid partial conclusions. Please try "
+                "again, or split the contract into fewer annexes."
             )
         except Exception:
             # Cualquier otro fallo: extracción de ficheros, red o API (el SDK
             # ya reintentó con backoff). El detalle real queda en el modo
             # depuración; al usuario final no se le enseña la tripa técnica.
-            estado.update(label="Análisis detenido", state="error")
+            estado.update(label="Analysis stopped", state="error")
             detalle_tecnico = traceback.format_exc()
-            mensaje_error = "No hemos podido completar el análisis. Inténtalo más tarde."
+            mensaje_error = "We could not complete the analysis. Please try again later."
 
     if mensaje_error:
         st.error(mensaje_error)
         if MODO_DEPURACION and detalle_tecnico:
-            with st.expander("🔧 Detalle técnico (modo depuración)", expanded=True):
+            with st.expander("🔧 Technical detail (debug mode)", expanded=True):
                 st.code(detalle_tecnico)
     elif st.session_state.resultado is not None:
         st.rerun()
