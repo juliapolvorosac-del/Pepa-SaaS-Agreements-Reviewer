@@ -1,7 +1,11 @@
-streamlit
-anthropic
-pdfplumber
-python-docx
+# Versiones fijadas por rango. Streamlit Cloud reinstala las dependencias en
+# cada despliegue: sin límites, un salto de versión mayor de cualquiera de
+# ellas podría romper la app un día en que no se ha tocado nada. El rango deja
+# entrar correcciones y mejoras menores, pero no cambios incompatibles.
+streamlit>=1.37,<2
+anthropic>=0.60,<1
+pdfplumber>=0.11,<1
+python-docx>=1.1,<2
 # Mistral (preproducción) NO necesita ningún paquete: su API se llama con
 # `urllib`, de la biblioteca estándar de Python. Ni el SDK `mistralai` ni
 # `httpx`, porque sus dependencias no siempre tienen versión compatible con el
