@@ -85,12 +85,13 @@ st.set_page_config(
 # Todo el tema vive aquí, en CSS, para no depender de un fichero de
 # configuración aparte. Colores:
 #   #F8F3F3  blanco cálido → fondo
-#   #2F2E48  índigo        → texto, barra lateral, botones y barra de progreso
-#   #ABA8E8  malva claro   → bordes, acentos y enlaces sobre fondo oscuro
+#   #2F2E48  índigo        → texto, barra lateral y barra de progreso
+#   #ABA8E8  malva claro   → botones, campos de texto, bordes y acentos
 #
 # El malva es un color CLARO: sobre el fondo blanco no tiene contraste
-# suficiente para texto, así que nunca se usa para leer, solo para delimitar.
-# El texto va siempre índigo sobre claro, o blanco cálido sobre índigo.
+# suficiente para texto, así que nunca se usa para leer, solo como fondo o
+# borde. El texto va siempre índigo sobre claro (malva incluido), o blanco
+# cálido sobre índigo.
 st.markdown(
     """
     <style>
@@ -181,10 +182,10 @@ st.markdown(
     }
 
     /* ---------- Botones ----------
-       Todo botón de la zona principal va en índigo con texto blanco cálido.
-       El color hay que forzarlo TAMBIÉN en los elementos internos: Streamlit
-       envuelve la etiqueta en otra etiqueta, y la regla general de arriba la
-       pintaría de índigo sobre índigo, dejándola ilegible. */
+       Todo botón de la zona principal va en malva claro con texto índigo:
+       el malva es claro, así que el índigo encima siempre se lee. El color
+       hay que forzarlo TAMBIÉN en los elementos internos: Streamlit envuelve
+       la etiqueta en otra etiqueta y heredaría otro color. */
     .stButton > button,
     .stDownloadButton > button,
     [data-testid="stBaseButton-primary"],
@@ -192,8 +193,8 @@ st.markdown(
     [data-testid="stBaseButton-secondaryFormSubmit"],
     [data-testid="stFileUploader"] button,
     [data-testid="stFileUploaderDropzone"] button {
-        background-color: #2F2E48 !important;
-        border: 1px solid #2F2E48 !important;
+        background-color: #ABA8E8 !important;
+        border: 1px solid #ABA8E8 !important;
         border-radius: 8px !important;
         font-weight: 600;
     }
@@ -207,20 +208,44 @@ st.markdown(
     [data-testid="stFileUploader"] button *,
     [data-testid="stFileUploaderDropzone"] button,
     [data-testid="stFileUploaderDropzone"] button * {
-        color: #F8F3F3 !important;
-        fill: #F8F3F3 !important;
+        color: #2F2E48 !important;
+        fill: #2F2E48 !important;
     }
     .stButton > button:hover:enabled,
     [data-testid="stFileUploader"] button:hover,
     [data-testid="stBaseButton-secondary"]:hover {
-        background-color: rgba(47, 46, 72, 0.86) !important;
-        border-color: #2F2E48 !important;
+        background-color: #938FE0 !important;
+        border-color: #938FE0 !important;
     }
     .stButton > button:disabled, .stButton > button:disabled * {
-        background-color: #ABA8E8 !important;
-        border-color: #ABA8E8 !important;
-        color: rgba(47, 46, 72, 0.62) !important;
-        fill: rgba(47, 46, 72, 0.62) !important;
+        background-color: rgba(171, 168, 232, 0.4) !important;
+        border-color: rgba(171, 168, 232, 0.4) !important;
+        color: rgba(47, 46, 72, 0.45) !important;
+        fill: rgba(47, 46, 72, 0.45) !important;
+    }
+
+    /* ---------- Campos de texto (contraseña incluida) ----------
+       Si no se fija, el campo hereda el tema oscuro del navegador y el texto
+       no se ve. Fondo malva muy claro, borde malva y texto índigo. */
+    [data-testid="stTextInput"] [data-baseweb="input"],
+    [data-testid="stTextInput"] [data-baseweb="base-input"],
+    [data-testid="stTextInput"] input {
+        background-color: rgba(171, 168, 232, 0.15) !important;
+        color: #2F2E48 !important;
+        -webkit-text-fill-color: #2F2E48 !important;
+        caret-color: #2F2E48 !important;
+    }
+    [data-testid="stTextInput"] [data-baseweb="input"] {
+        border: 1px solid #ABA8E8 !important;
+        border-radius: 8px !important;
+    }
+    /* El botón del ojo (mostrar/ocultar contraseña) va sobre el campo claro */
+    [data-testid="stTextInput"] button,
+    [data-testid="stTextInput"] button * {
+        background-color: transparent !important;
+        border: none !important;
+        color: #2F2E48 !important;
+        fill: #2F2E48 !important;
     }
 
     /* ---------- Barra de progreso ---------- */
@@ -298,22 +323,6 @@ st.markdown(
         width: 84px;
         margin: 0 auto 1.2em;
     }
-    /* Marco de referencia: se declara en la propia pantalla de subida, no solo
-       dentro del informe, para que el usuario sepa a qué derecho responde el
-       análisis antes de subir nada. */
-    .marco-pepa {
-        text-align: center;
-        max-width: 640px;
-        margin: 0 auto 2em;
-        padding: 10px 18px;
-        border: 1px solid #ABA8E8;
-        border-radius: 8px;
-        background: rgba(171, 168, 232, 0.15);
-        font-size: 0.92rem;
-        line-height: 1.45;
-        color: #2F2E48;
-    }
-
     /* ---------- Línea de vetos, bajo las métricas ---------- */
     .vetos-pepa {
         border: 1px solid #ABA8E8;
@@ -595,12 +604,11 @@ def pantalla_informe():
 # Pantalla 1 — Subida  (+ Pantalla 2 — Procesando, en el mismo flujo)
 # ---------------------------------------------------------------------------
 def pantalla_subida():
+    # El marco de referencia (posición del adquirente, derecho español y UE)
+    # vive únicamente en la barra lateral: aquí duplicaba esa información.
     st.markdown(
         "<h2 class='titulo-pepa'>PEPA. SaaS Contract Reviewer</h2>"
-        "<hr class='regla-pepa'>"
-        "<p class='marco-pepa'>Contracts are reviewed from the standpoint of the "
-        "<strong>acquiring party</strong>, against a review playbook built on "
-        "<strong>Spanish and European Union law</strong>.</p>",
+        "<hr class='regla-pepa'>",
         unsafe_allow_html=True,
     )
     st.markdown(
