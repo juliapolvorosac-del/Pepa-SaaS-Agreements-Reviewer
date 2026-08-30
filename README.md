@@ -10,6 +10,20 @@ Educational project developed by **Julia Polvorosa Cáceres**, in-house lawyer s
 
 Access is password-protected: every analysis makes real calls to the Claude API and has a cost. To request the password, write to juliapolvorosac@gmail.com. The generated report can be downloaded as a self-contained HTML document.
 
+## Screenshots
+
+**Upload screen.** The scope of the review — acquiring party's standpoint, Spanish and EU law — is stated before anything is uploaded. The level of scrutiny is chosen by the user, because the contract value and the criticality of the service are facts the contract itself often does not record.
+
+![Upload screen](img/upload-screen.png)
+
+**Report screen.** The score, the traffic light, the cost and the duration are computed by the application in code, not by the model. Any triggered veto is shown above the report, with the clauses that caused it.
+
+![Report screen](img/report-screen.png)
+
+**Usage detail.** Every review reports exactly what it consumed, phase by phase, and what it cost.
+
+![Usage detail](img/usage-detail.png)
+
 ## What it does
 
 1. **Triage** — checks that the document is a readable, in-scope SaaS agreement, identifies the parties, the governing law and the jurisdiction, and determines the level of scrutiny to apply based on the value and criticality of the contract.
