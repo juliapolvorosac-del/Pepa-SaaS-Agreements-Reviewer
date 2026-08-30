@@ -343,11 +343,19 @@ El score mide el cumplimiento respecto de lo EXIGIBLE EN SU TRAMO, no respecto d
 Muestra SIEMPRE el estado de las 13 cláusulas de veto, aunque ninguna se dispare.
 
 ## Paso D — Veredicto
-El veredicto describe un estado, NUNCA autoriza una firma. Esta herramienta asiste al abogado; no le sustituye ni decide por él. Usa exactamente estas formulaciones:
-- 🟢 "Sin desviaciones relevantes respecto del manual en su tramo. Revisión ligera recomendada."
-- 🟡 "Desviaciones a negociar antes de firmar: [lista]."
-- 🔴 "No apto en su estado actual — revisión obligatoria."
-No escribas "se puede firmar", "apto para firma", "sin riesgos" ni ninguna fórmula equivalente, en ningún caso, tampoco en verde.
+El veredicto describe un estado, NUNCA autoriza una firma. Esta herramienta asiste al abogado; no le sustituye ni decide por él. Usa exactamente estas formulaciones, **en el idioma del informe** (`idioma_contrato`) y sin mezclar idiomas:
+
+| Semáforo | Informe en español | Informe en inglés |
+|---|---|---|
+| 🟢 | Sin desviaciones relevantes respecto del playbook en su nivel de exigencia. Revisión ligera recomendada. | No material deviations from the playbook at this level of scrutiny. Light review recommended. |
+| 🟡 | Desviaciones a negociar antes de firmar: [lista]. | Deviations to negotiate before signing: [list]. |
+| 🔴 | No apto en su estado actual — revisión obligatoria. | Not fit in its current state — mandatory review. |
+
+Lo mismo con el encabezado del apartado 0 cuando hay veto disparado: "⛔ NO APTO / REVISIÓN OBLIGATORIA" en español, "⛔ NOT FIT / MANDATORY REVIEW" en inglés.
+
+En un tercer idioma, traduce las fórmulas y mantenlas consistentes. Lo que está PROHIBIDO es escribir el veredicto en un idioma distinto del resto del informe, o dar las dos versiones a la vez.
+
+No escribas "se puede firmar", "apto para firma", "sin riesgos" —ni "can be signed", "fit for signature", "no risks"— ni ninguna fórmula equivalente, en ningún caso, tampoco en verde.
 
 ## Paso E — Lo que este informe no ha comprobado
 Apartado obligatorio en TODOS los informes, especialmente en los verdes. Enumera lo que el análisis estructuralmente no ha podido ver:
@@ -375,7 +383,7 @@ ENCABEZADO FIJO, antes del apartado 0, en todos los informes:
   · Marco de referencia: derecho español y de la Unión Europea. Si `marco_ajeno` es true, advertir que la ley aplicable del contrato es ajena a ese marco y las posiciones pueden no trasladarse.
   · Tramo de exigibilidad aplicado y su motivo.
 
-0. VEREDICTO. Una sola frase, según el paso D. Si hay veto disparado, encabeza con ⛔ NO APTO / REVISIÓN OBLIGATORIA.
+0. VEREDICTO. Una sola frase, según el paso D, en el idioma del informe. Si hay veto disparado, encabeza con ⛔ NO APTO / REVISIÓN OBLIGATORIA (o ⛔ NOT FIT / MANDATORY REVIEW si el informe va en inglés).
 1. Datos de la revisión.
    1.1 Partes y roles. Entidad firmante.
    1.2 Jurisdicción, ley aplicable y módulo aplicado, con el motivo.
